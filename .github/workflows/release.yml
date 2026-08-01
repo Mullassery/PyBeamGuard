@@ -1,0 +1,92 @@
+name: Release Binaries
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  release:
+    name: Release ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        include:
+          - os: ubuntu-latest
+            artifact: pybeamguard-linux-x86_64
+            target: x86_64-unknown-linux-gnu
+          - os: macos-latest
+            artifact: pybeamguard-macos-universal
+            target: universal-apple-darwin
+          - os: windows-latest
+            artifact: pybeamguard-windows-x86_64.exe
+            target: x86_64-pc-windows-msvc
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          rustup target add x86_64-apple-darwin aarch64-apple-darwin
+          cargo build --release --target x86_64-apple-darwin --bin pybeamguard
+          cargo build --release --target aarch64-apple-darwin --bin pybeamguard
+          lipo -create \
+            target/x86_64-apple-darwin/release/pybeamguard \
+            target/aarch64-apple-darwin/release/pybeamguard \
+            -output pybeamguard-macos-universal
+
+      - name: Build (Linux/Windows)
+        if: runner.os != 'macOS'
+        run: cargo build --release --bin pybeamguard
+
+      - name: Prepare artifacts
+        shell: bash
+        run: |
+          if [ "${{ runner.os }}" = "macOS" ]; then
+            cp pybeamguard-macos-universal ${{ matrix.artifact }}
+          elif [ "${{ runner.os }}" = "Linux" ]; then
+            cp target/release/pybeamguard ${{ matrix.artifact }}
+          else
+            copy target\release\pybeamguard.exe "${{ matrix.artifact }}"
+          fi
+          chmod +x "${{ matrix.artifact }}" || true
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            ${{ matrix.artifact }}
+            Cargo.lock
+            README.md
+            BUILD_SUMMARY.md
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload to releases
+        uses: actions/upload-artifact@v3
+        with:
+          name: binaries
+          path: ${{ matrix.artifact }}
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo test --release
+
+  lint:
+    name: Lint & Format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo fmt -- --check
+      - run: cargo clippy -- -D warnings
