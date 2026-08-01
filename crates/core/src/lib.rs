@@ -5,6 +5,7 @@ pub mod analyzers;
 pub mod reporting;
 pub mod commercial;
 pub mod frameworks;
+pub mod ecosystem;
 
 pub use ir::{PipelineIR, TransformNode, TransformType};
 pub use analyzer::{Analyzer, AnalysisResult, Finding};
