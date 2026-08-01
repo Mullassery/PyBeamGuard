@@ -15,29 +15,22 @@
 
 ### How PyBeamGuard Compares
 
-| Feature | PyBeamGuard | Manual Review | Cloud Profiler | Dataflow UI |
-|---------|-------------|---------------|---|---|
-| **Pre-deployment analysis** | ✅ YES | ❌ No | ❌ No | ❌ No |
-| **Cost forecasting** | ✅ YES ($48-$2,500/mo) | ❌ No | ❌ No | ⚠️ Post-deploy |
-| **Hot key detection** | ✅ YES (HIGH/MEDIUM/LOW) | ⚠️ Manual (expert-only) | ❌ No | ❌ No (disabled in 2022) |
-| **Shuffle analysis** | ✅ YES (per-stage) | ⚠️ Manual | ❌ No | ⚠️ Post-deploy |
-| **State management audit** | ✅ YES (lifecycle validation) | ⚠️ Manual | ❌ No | ❌ No |
-| **Windowing validation** | ✅ YES (watermarks, triggers) | ⚠️ Manual | ❌ No | ❌ No |
-| **CI/CD integration** | ✅ YES (GitHub, GitLab, Jenkins) | ❌ No | ❌ No | ❌ No |
-| **Org governance** | ✅ YES (cost gates, SLOs, audit) | ❌ No | ❌ No | ❌ No |
-| **Framework support** | ✅ Beam, Flink, Spark | ❌ Manual only | ❌ No | ✅ Dataflow only |
-| **Cost** | 🎉 **FREE** | $$ (time/experts) | Included in GCP | Included in GCP |
-| **Setup required** | ✅ None (binary) | N/A | ✅ GCP account | ✅ GCP account |
-| **Offline capable** | ✅ YES | ✅ Yes | ❌ No | ❌ No |
+| Feature | PyBeamGuard | Cloud Profiler | Dataflow UI |
+|---------|-------------|---|---|
+| **Pre-deployment analysis** | ✅ YES | ❌ No | ❌ No |
+| **Cost forecasting** | ✅ YES ($48-$2,500/mo) | ❌ No | ⚠️ Post-deploy |
+| **Hot key detection** | ✅ YES (HIGH/MEDIUM/LOW) | ❌ No | ❌ No (disabled in 2022) |
+| **Shuffle analysis** | ✅ YES (per-stage) | ❌ No | ⚠️ Post-deploy |
+| **State management audit** | ✅ YES (lifecycle validation) | ❌ No | ❌ No |
+| **Windowing validation** | ✅ YES (watermarks, triggers) | ❌ No | ❌ No |
+| **CI/CD integration** | ✅ YES (GitHub, GitLab, Jenkins) | ❌ No | ❌ No |
+| **Org governance** | ✅ YES (cost gates, SLOs, audit) | ❌ No | ❌ No |
+| **Framework support** | ✅ Beam, Flink, Spark | ❌ No | ✅ Dataflow only |
+| **Cost** | 🎉 **FREE** | Included in GCP | Included in GCP |
+| **Setup required** | ✅ None (binary) | ✅ GCP account | ✅ GCP account |
+| **Offline capable** | ✅ YES | ❌ No | ❌ No |
 
 ### Why Choose PyBeamGuard?
-
-**vs. Manual Code Review:**
-- ✅ Consistent, reproducible analysis (no tribal knowledge)
-- ✅ 95%+ accuracy on anti-patterns (vs. 60-70% manual)
-- ✅ 10x faster (seconds vs. hours)
-- ✅ Scalable to 100s of pipelines
-- ✅ Continuous validation in CI/CD
 
 **vs. Cloud Profiler:**
 - ✅ Pre-deployment (not post-deploy)
@@ -435,12 +428,12 @@ A: Available now! Spark and Flink support included in v0.4.0. Kafka Streams comi
 
 ### Time to Insight
 
-| Task | PyBeamGuard | Manual Review | Cloud Profiler | Dataflow UI |
-|---|---|---|---|---|
-| Analyze pipeline | <1 sec | 15-30 min | N/A (need to run) | N/A (need to run) |
-| Detect hot keys | <1 sec | 1-2 hours | 30+ min (with run) | 30+ min (with run) |
-| Forecast cost | <1 sec | 2-4 hours | N/A | 24-48 hours (post-deploy) |
-| Architecture review | <2 sec | 2-4 hours | N/A | N/A |
+| Task | PyBeamGuard | Cloud Profiler | Dataflow UI |
+|---|---|---|---|
+| Analyze pipeline | <1 sec | N/A (need to run) | N/A (need to run) |
+| Detect hot keys | <1 sec | 30+ min (with run) | 30+ min (with run) |
+| Forecast cost | <1 sec | N/A | 24-48 hours (post-deploy) |
+| Architecture review | <2 sec | N/A | N/A |
 
 ---
 
