@@ -15,22 +15,20 @@
 
 ### How PyBeamGuard Compares
 
-| Feature | PyBeamGuard | Manual Review | Cloud Profiler | Dataflow UI | PyAirflowTester |
-|---------|-------------|---------------|---|---|---|
-| **Pre-deployment analysis** | ✅ YES | ❌ No | ❌ No | ❌ No | ✅ Yes* |
-| **Cost forecasting** | ✅ YES ($48-$2,500/mo) | ❌ No | ❌ No | ⚠️ Post-deploy | ❌ No |
-| **Hot key detection** | ✅ YES (HIGH/MEDIUM/LOW) | ⚠️ Manual (expert-only) | ❌ No | ❌ No (disabled in 2022) | ❌ No |
-| **Shuffle analysis** | ✅ YES (per-stage) | ⚠️ Manual | ❌ No | ⚠️ Post-deploy | ❌ No |
-| **State management audit** | ✅ YES (lifecycle validation) | ⚠️ Manual | ❌ No | ❌ No | ❌ No |
-| **Windowing validation** | ✅ YES (watermarks, triggers) | ⚠️ Manual | ❌ No | ❌ No | ❌ No |
-| **CI/CD integration** | ✅ YES (GitHub, GitLab, Jenkins) | ❌ No | ❌ No | ❌ No | ✅ Yes |
-| **Org governance** | ✅ YES (cost gates, SLOs, audit) | ❌ No | ❌ No | ❌ No | ⚠️ Partial |
-| **Framework support** | ✅ Beam, Flink, Spark | ❌ Manual only | ❌ No | ✅ Dataflow only | ✅ Airflow only |
-| **Cost** | 🎉 **FREE** | $$ (time/experts) | Included in GCP | Included in GCP | **FREE** |
-| **Setup required** | ✅ None (binary) | N/A | ✅ GCP account | ✅ GCP account | ✅ pip install |
-| **Offline capable** | ✅ YES | ✅ Yes | ❌ No | ❌ No | ✅ Yes |
-
-**\* PyAirflowTester focuses on DAG validation, not pipeline execution analysis like Beam does**
+| Feature | PyBeamGuard | Manual Review | Cloud Profiler | Dataflow UI |
+|---------|-------------|---------------|---|---|
+| **Pre-deployment analysis** | ✅ YES | ❌ No | ❌ No | ❌ No |
+| **Cost forecasting** | ✅ YES ($48-$2,500/mo) | ❌ No | ❌ No | ⚠️ Post-deploy |
+| **Hot key detection** | ✅ YES (HIGH/MEDIUM/LOW) | ⚠️ Manual (expert-only) | ❌ No | ❌ No (disabled in 2022) |
+| **Shuffle analysis** | ✅ YES (per-stage) | ⚠️ Manual | ❌ No | ⚠️ Post-deploy |
+| **State management audit** | ✅ YES (lifecycle validation) | ⚠️ Manual | ❌ No | ❌ No |
+| **Windowing validation** | ✅ YES (watermarks, triggers) | ⚠️ Manual | ❌ No | ❌ No |
+| **CI/CD integration** | ✅ YES (GitHub, GitLab, Jenkins) | ❌ No | ❌ No | ❌ No |
+| **Org governance** | ✅ YES (cost gates, SLOs, audit) | ❌ No | ❌ No | ❌ No |
+| **Framework support** | ✅ Beam, Flink, Spark | ❌ Manual only | ❌ No | ✅ Dataflow only |
+| **Cost** | 🎉 **FREE** | $$ (time/experts) | Included in GCP | Included in GCP |
+| **Setup required** | ✅ None (binary) | N/A | ✅ GCP account | ✅ GCP account |
+| **Offline capable** | ✅ YES | ✅ Yes | ❌ No | ❌ No |
 
 ### Why Choose PyBeamGuard?
 
@@ -54,12 +52,6 @@
 - ✅ Hot key detection (Dataflow disabled this for streaming)
 - ✅ No need to run expensive test jobs
 - ✅ Multi-framework support
-
-**vs. PyAirflowTester:**
-- ✅ Beam-specific, not just orchestration
-- ✅ Deep pipeline execution analysis (shuffles, state, windows)
-- ✅ Cost optimization (PyAirflowTester doesn't cover execution)
-- ✅ Can be complementary (use both for end-to-end validation)
 
 ---
 
@@ -137,10 +129,10 @@ Estimated Cost: $2,300/month → Optimized: $1,350/month (41% savings)
 
 ### Ecosystem Integrations (Free)
 
-- PyAirflowTester (orchestration context)
 - dbt (transformation cost analysis)
 - Data Contracts (schema & SLA validation)
 - FinOps Dashboard (cost attribution)
+- Apache Airflow (pipeline orchestration context)
 
 ---
 
@@ -413,14 +405,14 @@ A: Available now! Spark and Flink support included in v0.4.0. Kafka Streams comi
 
 ### Deployment & Integration
 
-| Aspect | PyBeamGuard | PyAirflowTester | Cloud Profiler | Dataflow UI |
-|---|---|---|---|---|
-| Installation | pip install / binary | pip install | Built-in (GCP) | Built-in (GCP) |
-| Setup time | <1 minute | <5 minutes | Account required | Account required |
-| Offline support | ✅ Full | ✅ Full | ❌ No | ❌ No |
-| CI/CD plugins | ✅ GitHub, GitLab, Jenkins | ⚠️ Limited | ❌ No | ❌ No |
-| Python version | 3.10+ (via PyO3) | 3.7+ | Any (GCP) | Any (GCP) |
-| Platform support | macOS, Linux, Windows | Any (Python) | GCP only | GCP only |
+| Aspect | PyBeamGuard | Cloud Profiler | Dataflow UI |
+|---|---|---|---|
+| Installation | pip install / wheel | Built-in (GCP) | Built-in (GCP) |
+| Setup time | <1 minute | Account required | Account required |
+| Offline support | ✅ Full | ❌ No | ❌ No |
+| CI/CD plugins | ✅ GitHub, GitLab, Jenkins | ❌ No | ❌ No |
+| Python version | 3.10+ (via PyO3) | Any (GCP) | Any (GCP) |
+| Platform support | macOS, Linux, Windows | GCP only | GCP only |
 
 ### Cost & Governance
 
@@ -437,10 +429,10 @@ A: Available now! Spark and Flink support included in v0.4.0. Kafka Streams comi
 
 | Task | PyBeamGuard | Manual Review | Cloud Profiler | Dataflow UI |
 |---|---|---|---|---|
-| Analyze 10-node pipeline | <1 sec | 15-30 min | N/A (need to run) | N/A (need to run) |
+| Analyze pipeline | <1 sec | 15-30 min | N/A (need to run) | N/A (need to run) |
 | Detect hot keys | <1 sec | 1-2 hours | 30+ min (with run) | 30+ min (with run) |
 | Forecast cost | <1 sec | 2-4 hours | N/A | 24-48 hours (post-deploy) |
-| Full architecture review | <2 sec | 2-4 hours | N/A | N/A |
+| Architecture review | <2 sec | 2-4 hours | N/A | N/A |
 
 ---
 
