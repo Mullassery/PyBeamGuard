@@ -1,30 +1,19 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct License {
-    pub tier: LicenseTier,
-    pub organization_id: String,
-    pub license_key: String,
-    pub expiration_date: String,
-    pub max_analyses_per_month: Option<u32>,
-    pub features: Vec<String>,
-}
-
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
-pub enum LicenseTier {
-    Community,      // Free, limited features
-    Professional,   // $500/month, all core features
-    Enterprise,     // $5K+/month, custom features
-}
+// ============================================================================
+// PyBeamGuard: FREE Proprietary Software
+//
+// All features available to all users at no cost.
+// Governance and organizational features for team coordination.
+// ============================================================================
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OrganizationConfig {
     pub org_id: String,
     pub org_name: String,
-    pub tier: LicenseTier,
 
-    // Governance settings
+    // Governance settings (available to all users)
     pub cost_budget_per_month: Option<f64>,
     pub reliability_slo_score: Option<f32>,  // Min acceptable reliability score (0-100)
     pub performance_slo_score: Option<f32>,  // Min acceptable performance score
@@ -92,47 +81,10 @@ pub struct CostAttribution {
     pub budget_utilization_percent: Option<f32>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct APIKey {
-    pub key_id: String,
-    pub org_id: String,
-    pub secret_hash: String,
-    pub created_at: String,
-    pub expires_at: Option<String>,
-    pub scopes: Vec<String>,
-    pub rate_limit_per_minute: u32,
-}
-
-impl License {
-    pub fn is_valid(&self) -> bool {
-        // Check expiration date
-        // In production: parse ISO date and compare
-        true
-    }
-
-    pub fn has_feature(&self, feature: &str) -> bool {
-        self.features.contains(&feature.to_string())
-    }
-}
-
 impl OrganizationConfig {
-    pub fn can_use_feature(&self, feature: &str) -> bool {
-        match self.tier {
-            LicenseTier::Community => {
-                matches!(feature, "analyze" | "export_json")
-            }
-            LicenseTier::Professional => {
-                matches!(feature,
-                    "analyze" | "export_json" | "export_html" |
-                    "cost_forecasting" | "ci_cd_integration" |
-                    "custom_reports"
-                )
-            }
-            LicenseTier::Enterprise => {
-                // All features
-                true
-            }
-        }
+    /// All features available to all users - PyBeamGuard is FREE
+    pub fn can_use_feature(&self, _feature: &str) -> bool {
+        true
     }
 
     pub fn is_cost_within_budget(&self, estimated_cost: f64) -> bool {
@@ -164,12 +116,12 @@ impl OrganizationConfig {
     }
 }
 
-// REST API endpoints documentation
+// REST API endpoints (when SaaS platform is built)
 /*
 POST /api/v1/analyze
   - Analyze a Beam pipeline
-  - Auth: API key required
-  - Rate limit: 100 requests/minute
+  - Auth: None required (free)
+  - Rate limit: Generous (1000+ requests/minute)
 
 GET /api/v1/organizations/{org_id}
   - Get organization configuration
@@ -184,10 +136,6 @@ GET /api/v1/organizations/{org_id}/audit-log
   - Retrieve audit log
   - Auth: Admin token
 
-POST /api/v1/organizations/{org_id}/api-keys
-  - Create API key
-  - Auth: Admin token
-
 GET /api/v1/organizations/{org_id}/cost-attribution
   - Get team cost breakdown
   - Auth: Admin token
@@ -196,6 +144,8 @@ POST /api/v1/organizations/{org_id}/policies
   - Create governance policy
   - Auth: Admin token
   - Enforce cost limits, reliability gates, deployment standards
+
+All endpoints are FREE - no licensing, no tiers, no paywalls
 */
 
 #[cfg(test)]
@@ -203,27 +153,10 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_license_validation() {
-        let license = License {
-            tier: LicenseTier::Professional,
-            organization_id: "org_123".to_string(),
-            license_key: "key_abc".to_string(),
-            expiration_date: "2026-12-31".to_string(),
-            max_analyses_per_month: Some(10000),
-            features: vec!["analyze".to_string(), "export_json".to_string()],
-        };
-
-        assert!(license.is_valid());
-        assert!(license.has_feature("analyze"));
-        assert!(!license.has_feature("export_html"));
-    }
-
-    #[test]
-    fn test_org_config_feature_access() {
-        let community_org = OrganizationConfig {
+    fn test_all_features_free() {
+        let org = OrganizationConfig {
             org_id: "org_1".to_string(),
-            org_name: "Community Org".to_string(),
-            tier: LicenseTier::Community,
+            org_name: "Test Org".to_string(),
             cost_budget_per_month: None,
             reliability_slo_score: None,
             performance_slo_score: None,
@@ -235,15 +168,14 @@ mod tests {
             audit_log_enabled: false,
         };
 
-        assert!(community_org.can_use_feature("analyze"));
-        assert!(!community_org.can_use_feature("cost_forecasting"));
-
-        let enterprise_org = OrganizationConfig {
-            tier: LicenseTier::Enterprise,
-            ..community_org
-        };
-
-        assert!(enterprise_org.can_use_feature("cost_forecasting"));
+        // All features available - it's FREE
+        assert!(org.can_use_feature("analyze"));
+        assert!(org.can_use_feature("export_json"));
+        assert!(org.can_use_feature("export_html"));
+        assert!(org.can_use_feature("cost_forecasting"));
+        assert!(org.can_use_feature("ci_cd_integration"));
+        assert!(org.can_use_feature("api_access"));
+        assert!(org.can_use_feature("anything_else"));
     }
 
     #[test]
@@ -251,7 +183,6 @@ mod tests {
         let org = OrganizationConfig {
             org_id: "org_123".to_string(),
             org_name: "Test Org".to_string(),
-            tier: LicenseTier::Professional,
             cost_budget_per_month: Some(5000.0),
             reliability_slo_score: Some(70.0),
             performance_slo_score: None,

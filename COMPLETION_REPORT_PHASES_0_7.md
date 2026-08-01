@@ -426,20 +426,22 @@ Memory: 18 MB
 
 ---
 
-## Commercial Features Summary
+## Features Available to All Users
 
-| Feature | Community | Professional | Enterprise |
-|---------|-----------|--------------|-----------|
-| Analyze | ✓ | ✓ | ✓ |
-| Export JSON | ✓ | ✓ | ✓ |
-| Export HTML | ✗ | ✓ | ✓ |
-| Cost Forecasting | ✗ | ✓ | ✓ |
-| CI/CD Integration | ✗ | ✓ | ✓ |
-| Org Governance | ✗ | ✓ | ✓ |
-| Audit Logs | ✗ | ✗ | ✓ |
-| Custom Rules | ✗ | ✗ | ✓ |
-| API Access | ✗ | ✗ | ✓ |
-| Cost: Monthly | Free | $500 | $5K+ |
+**PyBeamGuard is FREE - All features included**
+
+| Feature | Status |
+|---------|--------|
+| Analyze | ✅ Free |
+| Export JSON | ✅ Free |
+| Export HTML | ✅ Free |
+| Cost Forecasting | ✅ Free |
+| CI/CD Integration | ✅ Free |
+| Org Governance | ✅ Free |
+| Audit Logs | ✅ Free |
+| Custom Rules | ✅ Free |
+| API Access | ✅ Free |
+| **Cost: Monthly** | **🎉 $0** |
 
 ---
 

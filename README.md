@@ -59,7 +59,9 @@ Estimated Cost: $2,300/month → Optimized: $1,350/month (41% savings)
 
 ## Features
 
-### 7 Intelligent Analyzers
+### All Features FREE - Proprietary Software
+
+### 10 Intelligent Analyzers
 
 | Analyzer | Purpose | Version |
 |----------|---------|---------|
@@ -70,13 +72,24 @@ Estimated Cost: $2,300/month → Optimized: $1,350/month (41% savings)
 | **State Auditor** | Prevent state-related failures | ✅ v0.1 |
 | **Cost Intelligence** | Forecast Dataflow spend | ✅ v0.1 |
 | **Reliability Analysis** | Detect operational weaknesses | ✅ v0.1 |
+| **Best Practices Engine** | 20+ Beam optimization rules | ✅ v0.1 |
+| **Deployment Auditor** | Worker sizing & config validation | ✅ v0.1 |
+| **Architecture Review** | Executive summary & synthesis | ✅ v0.1 |
 
-### Planned (Phase 4+)
+### Framework Support (Free)
 
-- Best Practices Engine (20+ optimization rules)
-- Deployment Configuration Auditor
-- AI Architecture Review Synthesis
-- Multi-framework support (Flink, Spark, Kafka Streams)
+- ✅ Apache Beam (100% implemented)
+- ✅ Apache Flink (checkpoint & state analysis)
+- ✅ Apache Spark (micro-batch optimization)
+- 🔜 Kafka Streams (coming soon)
+- 🔜 Ray Data (coming soon)
+
+### Ecosystem Integrations (Free)
+
+- PyAirflowTester (orchestration context)
+- dbt (transformation cost analysis)
+- Data Contracts (schema & SLA validation)
+- FinOps Dashboard (cost attribution)
 
 ---
 
@@ -286,6 +299,9 @@ MIT License - See [LICENSE](LICENSE) file
 
 ## FAQ
 
+**Q: How much does PyBeamGuard cost?**  
+A: **FREE.** PyBeamGuard is proprietary software with no licensing fees, no tiers, no paywalls. All features available to everyone.
+
 **Q: Does PyBeamGuard require Python?**  
 A: No! The CLI binary has zero dependencies. Just download and run.
 
@@ -296,10 +312,10 @@ A: Tested on pipelines up to 1,000+ nodes. Analyzes in <500ms.
 A: 65-75% without data profile, 90%+ with detailed data profile. Confidence improves with real Dataflow metrics.
 
 **Q: Can I use this in CI/CD?**  
-A: Yes! Perfect for GitHub Actions, GitLab CI, Jenkins, Cloud Build.
+A: Yes! Perfect for GitHub Actions, GitLab CI, Jenkins, Cloud Build. No license checks, completely free.
 
 **Q: What about Spark, Flink, Kafka Streams?**  
-A: Coming in Phase 6 (2027 H2). Currently Beam-focused.
+A: Available now! Spark and Flink support included in v0.4.0. Kafka Streams coming soon.
 
 ---
 
