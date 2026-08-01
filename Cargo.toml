@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "crates/core",
+    "bindings/python",
 ]
 resolver = "2"
 
