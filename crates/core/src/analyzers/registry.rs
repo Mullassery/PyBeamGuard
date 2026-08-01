@@ -1,5 +1,5 @@
 use crate::analyzer::Analyzer;
-use super::{graph, hotkey, shuffle, windowing, state, cost, reliability};
+use super::{graph, hotkey, shuffle, windowing, state, cost, reliability, best_practices, deployment, synthesis};
 
 pub fn create_analyzers() -> Vec<Box<dyn Analyzer>> {
     vec![
@@ -13,6 +13,11 @@ pub fn create_analyzers() -> Vec<Box<dyn Analyzer>> {
         // Phase 3: Cost & Reliability
         Box::new(cost::CostAnalyzer),
         Box::new(reliability::ReliabilityAnalyzer),
+        // Phase 4: Advanced
+        Box::new(best_practices::BestPracticesAnalyzer),
+        Box::new(deployment::DeploymentAnalyzer),
+        // Synthesis (must be last)
+        Box::new(synthesis::SynthesisEngine),
     ]
 }
 
