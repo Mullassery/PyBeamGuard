@@ -59,9 +59,17 @@
 
 ### Installation
 
+**Requires Python 3.10 or later**
+
 ```bash
-# Via pip (Python 3.10+)
+# Using pip
 pip install pybeamguard
+
+# Using uv (faster)
+uv pip install pybeamguard
+
+# Verify installation
+pybeamguard --version
 ```
 
 ### Analyze a Pipeline
