@@ -7,7 +7,7 @@ name = "pybeamguard"
 version = "0.4.0"
 description = "Apache Beam & Dataflow pipeline analysis, reliability validation, and cost optimization platform"
 readme = "README.md"
-license = {text = "Proprietary"}
+license = {text = "Proprietary License — Free to use with explicit attribution"}
 authors = [
     {name = "Georgi Mammen Mullassery", email = "mullassery@gmail.com"}
 ]
