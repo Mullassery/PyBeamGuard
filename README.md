@@ -1,8 +1,10 @@
 # PyBeamGuard
 
-> The definitive static analysis platform for Apache Beam pipelines and Google Cloud Dataflow deployments.
+**Catch Apache Beam failures before deployment. Forecast costs. Fix hot keys.**
 
-**PyBeamGuard** analyzes Apache Beam pipelines to identify performance bottlenecks, reliability risks, cost drivers, and architectural anti-patterns **before deployment**.
+Analyze Beam pipelines pre-deployment to identify bottlenecks, reliability risks, and cost drivers. FREE. No GCP account required. Works offline.
+
+> The definitive static analysis platform for Apache Beam, Flink, and Spark pipelines.
 
 [![Build Status](https://img.shields.io/badge/build-passing-brightgreen)](https://github.com/Mullassery/PyBeamGuard)
 [![Version](https://img.shields.io/badge/version-0.4.0-blue)](https://github.com/Mullassery/PyBeamGuard/releases)
@@ -13,38 +15,20 @@
 
 ## Comparison with Similar Tools
 
-### How PyBeamGuard Compares
+### Why PyBeamGuard?
 
 | Feature | PyBeamGuard | Cloud Profiler | Dataflow UI |
 |---------|-------------|---|---|
-| **Pre-deployment analysis** | ✅ YES | ❌ No | ❌ No |
-| **Cost forecasting** | ✅ YES ($48-$2,500/mo) | ❌ No | ⚠️ Post-deploy |
-| **Hot key detection** | ✅ YES (HIGH/MEDIUM/LOW) | ❌ No | ❌ No (disabled in 2022) |
-| **Shuffle analysis** | ✅ YES (per-stage) | ❌ No | ⚠️ Post-deploy |
-| **State management audit** | ✅ YES (lifecycle validation) | ❌ No | ❌ No |
-| **Windowing validation** | ✅ YES (watermarks, triggers) | ❌ No | ❌ No |
-| **CI/CD integration** | ✅ YES (GitHub, GitLab, Jenkins) | ❌ No | ❌ No |
-| **Org governance** | ✅ YES (cost gates, SLOs, audit) | ❌ No | ❌ No |
-| **Framework support** | ✅ Beam, Flink, Spark | ❌ No | ✅ Dataflow only |
-| **Cost** | 🎉 **FREE** | Included in GCP | Included in GCP |
-| **Setup required** | ✅ None (binary) | ✅ GCP account | ✅ GCP account |
-| **Offline capable** | ✅ YES | ❌ No | ❌ No |
+| **Pre-deployment analysis** | ✅ | ❌ | ❌ |
+| **Cost forecasting** | ✅ ($48-$2.5K/mo) | ❌ | ⚠️ Post-deploy |
+| **Hot key detection** | ✅ | ❌ | ❌ |
+| **Shuffle analysis** | ✅ | ❌ | ⚠️ Post-deploy |
+| **Windowing validation** | ✅ | ❌ | ❌ |
+| **Cost** | 🎉 FREE | Included in GCP | Included in GCP |
+| **Setup required** | None | GCP account | GCP account |
+| **Offline capable** | ✅ | ❌ | ❌ |
 
-### Why Choose PyBeamGuard?
-
-**vs. Cloud Profiler:**
-- ✅ Pre-deployment (not post-deploy)
-- ✅ Beam-specific knowledge (watermarks, state, shuffles)
-- ✅ Cost forecasting (not just CPU profiling)
-- ✅ No GCP account required
-- ✅ Works offline
-
-**vs. Dataflow UI:**
-- ✅ Pre-deployment analysis (Dataflow UI is reactive)
-- ✅ Cost forecasting before deployment
-- ✅ Hot key detection (Dataflow disabled this for streaming)
-- ✅ No need to run expensive test jobs
-- ✅ Multi-framework support
+**Bottom line:** Pre-deployment analysis you control, costs you forecast before running, no vendor lock-in.
 
 ---
 
