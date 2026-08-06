@@ -46,11 +46,17 @@ try:
         PyTransformNode as TransformNode,
         PyPipelineIR as PipelineIR,
         PyAnalyzerInfo as AnalyzerInfo,
+        PyPipelineSummary as PipelineSummary,
         analyze,
         analyze_structured,
         parse_pipeline,
         get_available_analyzers,
         analyze_with_analyzers,
+        get_json_report,
+        get_text_report,
+        analyze_and_format,
+        get_pipeline_complexity_score,
+        get_pipeline_summary,
     )
 except ImportError as e:
     # PyO3 bindings not available (development mode)
@@ -64,11 +70,17 @@ except ImportError as e:
     TransformNode = None
     PipelineIR = None
     AnalyzerInfo = None
+    PipelineSummary = None
     analyze = None
     analyze_structured = None
     parse_pipeline = None
     get_available_analyzers = None
     analyze_with_analyzers = None
+    get_json_report = None
+    get_text_report = None
+    analyze_and_format = None
+    get_pipeline_complexity_score = None
+    get_pipeline_summary = None
 
 __all__ = [
     "__version__",
@@ -81,9 +93,15 @@ __all__ = [
     "TransformNode",
     "PipelineIR",
     "AnalyzerInfo",
+    "PipelineSummary",
     "analyze",
     "analyze_structured",
     "parse_pipeline",
     "get_available_analyzers",
     "analyze_with_analyzers",
+    "get_json_report",
+    "get_text_report",
+    "analyze_and_format",
+    "get_pipeline_complexity_score",
+    "get_pipeline_summary",
 ]

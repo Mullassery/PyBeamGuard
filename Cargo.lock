@@ -307,7 +307,7 @@ dependencies = [
 
 [[package]]
 name = "pybeamguard"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "pybeamguard-core",
  "pyo3",
@@ -316,7 +316,7 @@ dependencies = [
 
 [[package]]
 name = "pybeamguard-core"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "anyhow",
  "env_logger",

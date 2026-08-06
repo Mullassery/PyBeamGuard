@@ -1,5 +1,5 @@
 use pyo3::prelude::*;
-use pybeamguard_core::{analyze_pipeline, DataProfile, PipelineIR as RustPipelineIR, TransformNode as RustTransformNode, Finding as RustFinding, AnalysisResult as RustAnalysisResult, RiskSeverity, FindingType, Impact, BeamPipelineParser, AnalysisContext};
+use pybeamguard_core::{analyze_pipeline, DataProfile, PipelineIR as RustPipelineIR, TransformNode as RustTransformNode, Finding as RustFinding, AnalysisResult as RustAnalysisResult, RiskSeverity, FindingType, Impact, BeamPipelineParser, AnalysisContext, Reporter, JsonReporter, TextReporter};
 use pybeamguard_core::analyzers::registry::{create_analyzers, create_analyzers_by_names};
 use std::collections::HashMap;
 
@@ -641,15 +641,232 @@ fn analyze_with_analyzers(
 }
 
 // ============================================================================
+// PHASE 4: Reporter API - Format analysis results
+// ============================================================================
+
+#[pyfunction]
+fn get_json_report(code: String, data_profile: Option<String>) -> PyResult<String> {
+    let profile = if let Some(profile_json) = data_profile {
+        match serde_json::from_str::<DataProfile>(&profile_json) {
+            Ok(p) => Some(p),
+            Err(e) => {
+                return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
+                    "Invalid data profile JSON: {}",
+                    e
+                )))
+            }
+        }
+    } else {
+        None
+    };
+
+    let results = analyze_pipeline(&code, profile)
+        .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))?;
+
+    let reporter = JsonReporter;
+    Ok(reporter.format(&results))
+}
+
+// ============================================================================
+// PHASE 4: Reporter API - Format as human-readable text
+// ============================================================================
+
+#[pyfunction]
+fn get_text_report(code: String, data_profile: Option<String>) -> PyResult<String> {
+    let profile = if let Some(profile_json) = data_profile {
+        match serde_json::from_str::<DataProfile>(&profile_json) {
+            Ok(p) => Some(p),
+            Err(e) => {
+                return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
+                    "Invalid data profile JSON: {}",
+                    e
+                )))
+            }
+        }
+    } else {
+        None
+    };
+
+    let results = analyze_pipeline(&code, profile)
+        .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))?;
+
+    let reporter = TextReporter;
+    Ok(reporter.format(&results))
+}
+
+// ============================================================================
+// PHASE 4: Reporter API - Format results with selected analyzers
+// ============================================================================
+
+#[pyfunction]
+#[pyo3(signature = (code, analyzer_names, report_format = "json", data_profile=None))]
+fn analyze_and_format(
+    code: String,
+    analyzer_names: Vec<String>,
+    report_format: &str,
+    data_profile: Option<String>,
+) -> PyResult<String> {
+    let profile = if let Some(profile_json) = data_profile {
+        match serde_json::from_str::<DataProfile>(&profile_json) {
+            Ok(p) => Some(p),
+            Err(e) => {
+                return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
+                    "Invalid data profile JSON: {}",
+                    e
+                )))
+            }
+        }
+    } else {
+        None
+    };
+
+    // Parse pipeline
+    let parser = BeamPipelineParser::new();
+    let ir = parser.parse(&code)
+        .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))?;
+
+    // Filter analyzers by name
+    let names: Vec<&str> = analyzer_names.iter().map(|s| s.as_str()).collect();
+    let analyzers = create_analyzers_by_names(&names);
+
+    if analyzers.is_empty() {
+        return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
+            format!("No analyzers matched: {:?}", analyzer_names)
+        ));
+    }
+
+    // Run selected analyzers
+    let mut results = Vec::new();
+    for analyzer in analyzers {
+        match analyzer.analyze(&ir) {
+            Ok(result) => results.push(result),
+            Err(e) => {
+                return Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
+                    format!("Analyzer failed: {}", e)
+                ))
+            }
+        }
+    }
+
+    // Format based on requested format
+    match report_format {
+        "json" => {
+            let reporter = JsonReporter;
+            Ok(reporter.format(&results))
+        }
+        "text" => {
+            let reporter = TextReporter;
+            Ok(reporter.format(&results))
+        }
+        _ => Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
+            format!("Unknown format '{}'. Use 'json' or 'text'", report_format)
+        )),
+    }
+}
+
+// ============================================================================
+// PHASE 5: Enhanced pipeline inspection - Get multiple aspects
+// ============================================================================
+
+#[pyfunction]
+fn get_pipeline_complexity_score(code: String) -> PyResult<f64> {
+    let parser = BeamPipelineParser::new();
+    let ir = parser.parse(&code)
+        .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))?;
+
+    let nodes = ir.nodes.len() as f64;
+    let edges = ir.edges.len() as f64;
+
+    // Simple complexity: nodes + (edges * 0.5)
+    Ok(nodes + (edges * 0.5))
+}
+
+// ============================================================================
+// PHASE 5: Get pipeline summary without full analysis
+// ============================================================================
+
+#[pyclass]
+#[derive(Clone)]
+pub struct PyPipelineSummary {
+    pub name: String,
+    pub node_count: usize,
+    pub edge_count: usize,
+    pub source_count: usize,
+    pub sink_count: usize,
+    pub complexity: f64,
+}
+
+#[pymethods]
+impl PyPipelineSummary {
+    #[getter]
+    fn get_name(&self) -> String {
+        self.name.clone()
+    }
+
+    #[getter]
+    fn get_node_count(&self) -> usize {
+        self.node_count
+    }
+
+    #[getter]
+    fn get_edge_count(&self) -> usize {
+        self.edge_count
+    }
+
+    #[getter]
+    fn get_source_count(&self) -> usize {
+        self.source_count
+    }
+
+    #[getter]
+    fn get_sink_count(&self) -> usize {
+        self.sink_count
+    }
+
+    #[getter]
+    fn get_complexity(&self) -> f64 {
+        self.complexity
+    }
+
+    fn __repr__(&self) -> String {
+        format!(
+            "PipelineSummary(name='{}', nodes={}, edges={}, sources={}, sinks={}, complexity={})",
+            self.name, self.node_count, self.edge_count, self.source_count, self.sink_count,
+            self.complexity
+        )
+    }
+}
+
+#[pyfunction]
+fn get_pipeline_summary(code: String) -> PyResult<PyPipelineSummary> {
+    let parser = BeamPipelineParser::new();
+    let ir = parser.parse(&code)
+        .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))?;
+
+    let source_count = ir.get_source_nodes().len();
+    let sink_count = ir.get_sink_nodes().len();
+    let complexity = ir.nodes.len() as f64 + (ir.edges.len() as f64 * 0.5);
+
+    Ok(PyPipelineSummary {
+        name: ir.name.clone(),
+        node_count: ir.nodes.len(),
+        edge_count: ir.edges.len(),
+        source_count,
+        sink_count,
+        complexity,
+    })
+}
+
+// ============================================================================
 // PYMODULE: Registration
 // ============================================================================
 
 #[pymodule]
 fn pybeamguard(_py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
-    m.add("__version__", "0.6.0")?;
+    m.add("__version__", "0.7.0")?;
     m.add(
         "__doc__",
-        "Apache Beam & Dataflow pipeline analysis with selective analyzer execution and inspection APIs",
+        "Apache Beam & Dataflow pipeline analysis with reporters and advanced inspection APIs",
     )?;
 
     // Register classes (Phase 1-2)
@@ -663,6 +880,9 @@ fn pybeamguard(_py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     // Register Phase 3 classes
     m.add_class::<PyAnalyzerInfo>()?;
 
+    // Register Phase 4-5 classes
+    m.add_class::<PyPipelineSummary>()?;
+
     // Register functions (Phase 1-2)
     m.add_function(wrap_pyfunction!(analyze, m)?)?;
     m.add_function(wrap_pyfunction!(analyze_structured, m)?)?;
@@ -671,6 +891,15 @@ fn pybeamguard(_py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     // Register Phase 3 functions
     m.add_function(wrap_pyfunction!(get_available_analyzers, m)?)?;
     m.add_function(wrap_pyfunction!(analyze_with_analyzers, m)?)?;
+
+    // Register Phase 4 functions (Reporters)
+    m.add_function(wrap_pyfunction!(get_json_report, m)?)?;
+    m.add_function(wrap_pyfunction!(get_text_report, m)?)?;
+    m.add_function(wrap_pyfunction!(analyze_and_format, m)?)?;
+
+    // Register Phase 5 functions (Pipeline inspection)
+    m.add_function(wrap_pyfunction!(get_pipeline_complexity_score, m)?)?;
+    m.add_function(wrap_pyfunction!(get_pipeline_summary, m)?)?;
 
     Ok(())
 }
