@@ -858,15 +858,238 @@ fn get_pipeline_summary(code: String) -> PyResult<PyPipelineSummary> {
 }
 
 // ============================================================================
+// PHASE 6: Result Filtering - Filter findings by severity
+// ============================================================================
+
+#[pyfunction]
+fn filter_findings_by_severity(results: Vec<PyAnalysisResult>, min_severity: u32) -> PyResult<Vec<PyAnalysisResult>> {
+    let filtered: Vec<PyAnalysisResult> = results
+        .into_iter()
+        .map(|mut result| {
+            result.findings.retain(|f| f.severity.score() >= min_severity);
+            result
+        })
+        .collect();
+
+    Ok(filtered)
+}
+
+// ============================================================================
+// PHASE 6: Pipeline node type analysis
+// ============================================================================
+
+#[pyfunction]
+fn get_node_types_in_pipeline(code: String) -> PyResult<std::collections::HashMap<String, usize>> {
+    let parser = BeamPipelineParser::new();
+    let ir = parser.parse(&code)
+        .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))?;
+
+    let mut type_counts: HashMap<String, usize> = HashMap::new();
+    for node in &ir.nodes {
+        let node_type = format!("{:?}", node.node_type);
+        *type_counts.entry(node_type).or_insert(0) += 1;
+    }
+
+    Ok(type_counts)
+}
+
+// ============================================================================
+// PHASE 6: Parser validation without analysis
+// ============================================================================
+
+#[pyfunction]
+fn validate_pipeline_syntax(code: String) -> PyResult<bool> {
+    let parser = BeamPipelineParser::new();
+    match parser.parse(&code) {
+        Ok(_) => Ok(true),
+        Err(_) => Ok(false),
+    }
+}
+
+// ============================================================================
+// PHASE 6: Get pipeline statistics
+// ============================================================================
+
+#[pyclass]
+#[derive(Clone)]
+pub struct PyPipelineStats {
+    pub total_nodes: usize,
+    pub total_edges: usize,
+    pub source_count: usize,
+    pub sink_count: usize,
+    pub avg_node_inputs: f64,
+    pub avg_node_outputs: f64,
+    pub max_depth: usize,
+}
+
+#[pymethods]
+impl PyPipelineStats {
+    #[getter]
+    fn get_total_nodes(&self) -> usize {
+        self.total_nodes
+    }
+
+    #[getter]
+    fn get_total_edges(&self) -> usize {
+        self.total_edges
+    }
+
+    #[getter]
+    fn get_source_count(&self) -> usize {
+        self.source_count
+    }
+
+    #[getter]
+    fn get_sink_count(&self) -> usize {
+        self.sink_count
+    }
+
+    #[getter]
+    fn get_avg_node_inputs(&self) -> f64 {
+        self.avg_node_inputs
+    }
+
+    #[getter]
+    fn get_avg_node_outputs(&self) -> f64 {
+        self.avg_node_outputs
+    }
+
+    #[getter]
+    fn get_max_depth(&self) -> usize {
+        self.max_depth
+    }
+
+    fn __repr__(&self) -> String {
+        format!(
+            "PipelineStats(nodes={}, edges={}, sources={}, sinks={}, depth={})",
+            self.total_nodes, self.total_edges, self.source_count, self.sink_count, self.max_depth
+        )
+    }
+}
+
+#[pyfunction]
+fn get_pipeline_stats(code: String) -> PyResult<PyPipelineStats> {
+    let parser = BeamPipelineParser::new();
+    let ir = parser.parse(&code)
+        .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))?;
+
+    let source_count = ir.get_source_nodes().len();
+    let sink_count = ir.get_sink_nodes().len();
+
+    let avg_inputs = if ir.nodes.is_empty() {
+        0.0
+    } else {
+        ir.nodes.iter().map(|n| n.inputs.len()).sum::<usize>() as f64 / ir.nodes.len() as f64
+    };
+
+    let avg_outputs = if ir.nodes.is_empty() {
+        0.0
+    } else {
+        ir.nodes.iter().map(|n| n.outputs.len()).sum::<usize>() as f64 / ir.nodes.len() as f64
+    };
+
+    // Simple max depth calculation
+    let max_depth = if ir.edges.is_empty() {
+        1
+    } else {
+        ir.edges.len()
+    };
+
+    Ok(PyPipelineStats {
+        total_nodes: ir.nodes.len(),
+        total_edges: ir.edges.len(),
+        source_count,
+        sink_count,
+        avg_node_inputs: avg_inputs,
+        avg_node_outputs: avg_outputs,
+        max_depth,
+    })
+}
+
+// ============================================================================
+// PHASE 6: Result severity summary
+// ============================================================================
+
+#[pyclass]
+#[derive(Clone)]
+pub struct PySeveritySummary {
+    pub critical_count: usize,
+    pub high_count: usize,
+    pub medium_count: usize,
+    pub low_count: usize,
+    pub info_count: usize,
+}
+
+#[pymethods]
+impl PySeveritySummary {
+    #[getter]
+    fn get_critical_count(&self) -> usize {
+        self.critical_count
+    }
+
+    #[getter]
+    fn get_high_count(&self) -> usize {
+        self.high_count
+    }
+
+    #[getter]
+    fn get_medium_count(&self) -> usize {
+        self.medium_count
+    }
+
+    #[getter]
+    fn get_low_count(&self) -> usize {
+        self.low_count
+    }
+
+    #[getter]
+    fn get_info_count(&self) -> usize {
+        self.info_count
+    }
+
+    fn __repr__(&self) -> String {
+        format!(
+            "SeveritySummary(critical={}, high={}, medium={}, low={}, info={})",
+            self.critical_count, self.high_count, self.medium_count, self.low_count, self.info_count
+        )
+    }
+}
+
+#[pyfunction]
+fn get_severity_summary(results: Vec<PyAnalysisResult>) -> PyResult<PySeveritySummary> {
+    let mut summary = PySeveritySummary {
+        critical_count: 0,
+        high_count: 0,
+        medium_count: 0,
+        low_count: 0,
+        info_count: 0,
+    };
+
+    for result in &results {
+        for finding in &result.findings {
+            match finding.severity {
+                PyRiskSeverity::Critical => summary.critical_count += 1,
+                PyRiskSeverity::High => summary.high_count += 1,
+                PyRiskSeverity::Medium => summary.medium_count += 1,
+                PyRiskSeverity::Low => summary.low_count += 1,
+                PyRiskSeverity::Info => summary.info_count += 1,
+            }
+        }
+    }
+
+    Ok(summary)
+}
+
+// ============================================================================
 // PYMODULE: Registration
 // ============================================================================
 
 #[pymodule]
 fn pybeamguard(_py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
-    m.add("__version__", "0.7.0")?;
+    m.add("__version__", "0.8.0")?;
     m.add(
         "__doc__",
-        "Apache Beam & Dataflow pipeline analysis with reporters and advanced inspection APIs",
+        "Apache Beam & Dataflow pipeline analysis with advanced filtering and statistics",
     )?;
 
     // Register classes (Phase 1-2)
@@ -882,6 +1105,10 @@ fn pybeamguard(_py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
 
     // Register Phase 4-5 classes
     m.add_class::<PyPipelineSummary>()?;
+
+    // Register Phase 6 classes
+    m.add_class::<PyPipelineStats>()?;
+    m.add_class::<PySeveritySummary>()?;
 
     // Register functions (Phase 1-2)
     m.add_function(wrap_pyfunction!(analyze, m)?)?;
@@ -900,6 +1127,13 @@ fn pybeamguard(_py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     // Register Phase 5 functions (Pipeline inspection)
     m.add_function(wrap_pyfunction!(get_pipeline_complexity_score, m)?)?;
     m.add_function(wrap_pyfunction!(get_pipeline_summary, m)?)?;
+
+    // Register Phase 6 functions (Filtering & statistics)
+    m.add_function(wrap_pyfunction!(filter_findings_by_severity, m)?)?;
+    m.add_function(wrap_pyfunction!(get_node_types_in_pipeline, m)?)?;
+    m.add_function(wrap_pyfunction!(validate_pipeline_syntax, m)?)?;
+    m.add_function(wrap_pyfunction!(get_pipeline_stats, m)?)?;
+    m.add_function(wrap_pyfunction!(get_severity_summary, m)?)?;
 
     Ok(())
 }

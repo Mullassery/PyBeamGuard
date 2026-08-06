@@ -47,6 +47,8 @@ try:
         PyPipelineIR as PipelineIR,
         PyAnalyzerInfo as AnalyzerInfo,
         PyPipelineSummary as PipelineSummary,
+        PyPipelineStats as PipelineStats,
+        PySeveritySummary as SeveritySummary,
         analyze,
         analyze_structured,
         parse_pipeline,
@@ -57,6 +59,11 @@ try:
         analyze_and_format,
         get_pipeline_complexity_score,
         get_pipeline_summary,
+        filter_findings_by_severity,
+        get_node_types_in_pipeline,
+        validate_pipeline_syntax,
+        get_pipeline_stats,
+        get_severity_summary,
     )
 except ImportError as e:
     # PyO3 bindings not available (development mode)
@@ -71,6 +78,8 @@ except ImportError as e:
     PipelineIR = None
     AnalyzerInfo = None
     PipelineSummary = None
+    PipelineStats = None
+    SeveritySummary = None
     analyze = None
     analyze_structured = None
     parse_pipeline = None
@@ -81,6 +90,11 @@ except ImportError as e:
     analyze_and_format = None
     get_pipeline_complexity_score = None
     get_pipeline_summary = None
+    filter_findings_by_severity = None
+    get_node_types_in_pipeline = None
+    validate_pipeline_syntax = None
+    get_pipeline_stats = None
+    get_severity_summary = None
 
 __all__ = [
     "__version__",
@@ -94,6 +108,8 @@ __all__ = [
     "PipelineIR",
     "AnalyzerInfo",
     "PipelineSummary",
+    "PipelineStats",
+    "SeveritySummary",
     "analyze",
     "analyze_structured",
     "parse_pipeline",
@@ -104,4 +120,9 @@ __all__ = [
     "analyze_and_format",
     "get_pipeline_complexity_score",
     "get_pipeline_summary",
+    "filter_findings_by_severity",
+    "get_node_types_in_pipeline",
+    "validate_pipeline_syntax",
+    "get_pipeline_stats",
+    "get_severity_summary",
 ]
