@@ -39,7 +39,8 @@ Documentation = "https://github.com/Mullassery/pybeamguard#readme"
 pybeamguard = "pybeamguard.cli:main"
 
 [tool.maturin]
-module-name = "pybeamguard.core"
+manifest-path = "bindings/python/Cargo.toml"
+module-name = "pybeamguard"
 features = ["pyo3/extension-module"]
 
 [tool.uv]
