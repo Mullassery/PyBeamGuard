@@ -18,7 +18,7 @@ Example:
     $ pybeamguard analyze pipeline.py
     $ pybeamguard analyze pipeline.py --format json
 
-    # Python API (v0.6.0+)
+    # Python API (v0.7.0+)
     from pybeamguard import core
     results = core.analyze_structured(pipeline_code)
     for result in results:
@@ -29,7 +29,7 @@ Example:
 Visit: https://github.com/Mullassery/pybeamguard
 """
 
-__version__ = "0.6.0"
+__version__ = "0.7.0"
 __author__ = "Georgi Mammen Mullassery"
 __email__ = "mullassery@gmail.com"
 __license__ = "Proprietary"
