@@ -1081,15 +1081,221 @@ fn get_severity_summary(results: Vec<PyAnalysisResult>) -> PyResult<PySeveritySu
 }
 
 // ============================================================================
+// PHASE 7: Finding deduplication - Remove duplicate findings
+// ============================================================================
+
+#[pyfunction]
+fn deduplicate_findings(results: Vec<PyAnalysisResult>) -> PyResult<Vec<PyAnalysisResult>> {
+    let mut deduplicated = Vec::new();
+    let mut seen_ids = std::collections::HashSet::new();
+
+    for result in results {
+        let mut unique_findings = Vec::new();
+        for finding in result.findings {
+            if seen_ids.insert(finding.id.clone()) {
+                unique_findings.push(finding);
+            }
+        }
+        deduplicated.push(PyAnalysisResult {
+            analyzer_name: result.analyzer_name,
+            version: result.version,
+            findings: unique_findings,
+            metrics: result.metrics,
+            summary: result.summary,
+            confidence: result.confidence,
+        });
+    }
+
+    Ok(deduplicated)
+}
+
+// ============================================================================
+// PHASE 7: Result comparison - Compare two analysis runs
+// ============================================================================
+
+#[pyclass]
+#[derive(Clone)]
+pub struct PyResultComparison {
+    pub findings_added: usize,
+    pub findings_removed: usize,
+    pub findings_unchanged: usize,
+    pub severity_changed: usize,
+}
+
+#[pymethods]
+impl PyResultComparison {
+    #[getter]
+    fn get_findings_added(&self) -> usize {
+        self.findings_added
+    }
+
+    #[getter]
+    fn get_findings_removed(&self) -> usize {
+        self.findings_removed
+    }
+
+    #[getter]
+    fn get_findings_unchanged(&self) -> usize {
+        self.findings_unchanged
+    }
+
+    #[getter]
+    fn get_severity_changed(&self) -> usize {
+        self.severity_changed
+    }
+
+    fn __repr__(&self) -> String {
+        format!(
+            "ResultComparison(added={}, removed={}, unchanged={}, severity_changed={})",
+            self.findings_added, self.findings_removed, self.findings_unchanged, self.severity_changed
+        )
+    }
+}
+
+#[pyfunction]
+fn compare_results(
+    old_results: Vec<PyAnalysisResult>,
+    new_results: Vec<PyAnalysisResult>,
+) -> PyResult<PyResultComparison> {
+    let old_ids: std::collections::HashSet<_> = old_results
+        .iter()
+        .flat_map(|r| r.findings.iter().map(|f| f.id.clone()))
+        .collect();
+
+    let new_ids: std::collections::HashSet<_> = new_results
+        .iter()
+        .flat_map(|r| r.findings.iter().map(|f| f.id.clone()))
+        .collect();
+
+    let added = new_ids.iter().filter(|id| !old_ids.contains(*id)).count();
+    let removed = old_ids.iter().filter(|id| !new_ids.contains(*id)).count();
+    let unchanged = new_ids.iter().filter(|id| old_ids.contains(*id)).count();
+
+    Ok(PyResultComparison {
+        findings_added: added,
+        findings_removed: removed,
+        findings_unchanged: unchanged,
+        severity_changed: 0, // Simplified for this phase
+    })
+}
+
+// ============================================================================
+// PHASE 7: Analyzer ranking - Rank analyzers by finding count
+// ============================================================================
+
+#[pyclass]
+#[derive(Clone)]
+pub struct PyAnalyzerRanking {
+    pub analyzer_name: String,
+    pub finding_count: usize,
+    pub avg_confidence: f32,
+}
+
+#[pymethods]
+impl PyAnalyzerRanking {
+    #[getter]
+    fn get_analyzer_name(&self) -> String {
+        self.analyzer_name.clone()
+    }
+
+    #[getter]
+    fn get_finding_count(&self) -> usize {
+        self.finding_count
+    }
+
+    #[getter]
+    fn get_avg_confidence(&self) -> f32 {
+        self.avg_confidence
+    }
+
+    fn __repr__(&self) -> String {
+        format!(
+            "AnalyzerRanking(analyzer='{}', findings={}, confidence={})",
+            self.analyzer_name, self.finding_count, self.avg_confidence
+        )
+    }
+}
+
+#[pyfunction]
+fn rank_analyzers_by_impact(results: Vec<PyAnalysisResult>) -> PyResult<Vec<PyAnalyzerRanking>> {
+    let mut rankings = Vec::new();
+
+    for result in results {
+        if result.findings.is_empty() {
+            continue;
+        }
+
+        let avg_confidence = result.findings.iter().map(|f| f.confidence).sum::<f32>()
+            / result.findings.len() as f32;
+
+        rankings.push(PyAnalyzerRanking {
+            analyzer_name: result.analyzer_name,
+            finding_count: result.findings.len(),
+            avg_confidence,
+        });
+    }
+
+    rankings.sort_by(|a, b| b.finding_count.cmp(&a.finding_count));
+    Ok(rankings)
+}
+
+// ============================================================================
+// PHASE 7: Finding search - Search findings by title/description
+// ============================================================================
+
+#[pyfunction]
+fn search_findings(results: Vec<PyAnalysisResult>, query: &str) -> PyResult<Vec<PyFinding>> {
+    let mut matches = Vec::new();
+    let query_lower = query.to_lowercase();
+
+    for result in results {
+        for finding in result.findings {
+            if finding.title.to_lowercase().contains(&query_lower)
+                || finding.description.to_lowercase().contains(&query_lower)
+            {
+                matches.push(finding);
+            }
+        }
+    }
+
+    Ok(matches)
+}
+
+// ============================================================================
+// PHASE 7: Result aggregation - Merge multiple analysis results
+// ============================================================================
+
+#[pyfunction]
+fn merge_results(result_sets: Vec<Vec<PyAnalysisResult>>) -> PyResult<Vec<PyAnalysisResult>> {
+    let mut merged: std::collections::HashMap<String, PyAnalysisResult> =
+        std::collections::HashMap::new();
+
+    for results in result_sets {
+        for result in results {
+            merged
+                .entry(result.analyzer_name.clone())
+                .or_insert_with(|| result.clone())
+                .findings
+                .extend(result.findings);
+        }
+    }
+
+    let mut final_results: Vec<PyAnalysisResult> = merged.into_values().collect();
+    final_results.sort_by(|a, b| a.analyzer_name.cmp(&b.analyzer_name));
+
+    Ok(final_results)
+}
+
+// ============================================================================
 // PYMODULE: Registration
 // ============================================================================
 
 #[pymodule]
 fn pybeamguard(_py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
-    m.add("__version__", "0.8.0")?;
+    m.add("__version__", "0.9.0")?;
     m.add(
         "__doc__",
-        "Apache Beam & Dataflow pipeline analysis with advanced filtering and statistics",
+        "Apache Beam & Dataflow pipeline analysis with result comparison and analytics",
     )?;
 
     // Register classes (Phase 1-2)
@@ -1109,6 +1315,10 @@ fn pybeamguard(_py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     // Register Phase 6 classes
     m.add_class::<PyPipelineStats>()?;
     m.add_class::<PySeveritySummary>()?;
+
+    // Register Phase 7 classes
+    m.add_class::<PyResultComparison>()?;
+    m.add_class::<PyAnalyzerRanking>()?;
 
     // Register functions (Phase 1-2)
     m.add_function(wrap_pyfunction!(analyze, m)?)?;
@@ -1134,6 +1344,13 @@ fn pybeamguard(_py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(validate_pipeline_syntax, m)?)?;
     m.add_function(wrap_pyfunction!(get_pipeline_stats, m)?)?;
     m.add_function(wrap_pyfunction!(get_severity_summary, m)?)?;
+
+    // Register Phase 7 functions (Result analysis & comparison)
+    m.add_function(wrap_pyfunction!(deduplicate_findings, m)?)?;
+    m.add_function(wrap_pyfunction!(compare_results, m)?)?;
+    m.add_function(wrap_pyfunction!(rank_analyzers_by_impact, m)?)?;
+    m.add_function(wrap_pyfunction!(search_findings, m)?)?;
+    m.add_function(wrap_pyfunction!(merge_results, m)?)?;
 
     Ok(())
 }

@@ -49,6 +49,8 @@ try:
         PyPipelineSummary as PipelineSummary,
         PyPipelineStats as PipelineStats,
         PySeveritySummary as SeveritySummary,
+        PyResultComparison as ResultComparison,
+        PyAnalyzerRanking as AnalyzerRanking,
         analyze,
         analyze_structured,
         parse_pipeline,
@@ -64,6 +66,11 @@ try:
         validate_pipeline_syntax,
         get_pipeline_stats,
         get_severity_summary,
+        deduplicate_findings,
+        compare_results,
+        rank_analyzers_by_impact,
+        search_findings,
+        merge_results,
     )
 except ImportError as e:
     # PyO3 bindings not available (development mode)
@@ -80,6 +87,8 @@ except ImportError as e:
     PipelineSummary = None
     PipelineStats = None
     SeveritySummary = None
+    ResultComparison = None
+    AnalyzerRanking = None
     analyze = None
     analyze_structured = None
     parse_pipeline = None
@@ -95,6 +104,11 @@ except ImportError as e:
     validate_pipeline_syntax = None
     get_pipeline_stats = None
     get_severity_summary = None
+    deduplicate_findings = None
+    compare_results = None
+    rank_analyzers_by_impact = None
+    search_findings = None
+    merge_results = None
 
 __all__ = [
     "__version__",
@@ -110,6 +124,8 @@ __all__ = [
     "PipelineSummary",
     "PipelineStats",
     "SeveritySummary",
+    "ResultComparison",
+    "AnalyzerRanking",
     "analyze",
     "analyze_structured",
     "parse_pipeline",
@@ -125,4 +141,9 @@ __all__ = [
     "validate_pipeline_syntax",
     "get_pipeline_stats",
     "get_severity_summary",
+    "deduplicate_findings",
+    "compare_results",
+    "rank_analyzers_by_impact",
+    "search_findings",
+    "merge_results",
 ]
