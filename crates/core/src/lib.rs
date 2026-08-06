@@ -7,8 +7,8 @@ pub mod commercial;
 pub mod frameworks;
 pub mod ecosystem;
 
-pub use ir::{PipelineIR, TransformNode, TransformType};
-pub use analyzer::{Analyzer, AnalysisResult, Finding};
+pub use ir::{PipelineIR, TransformNode, TransformType, Edge, PipelineMetadata, Runner, DeploymentConfig};
+pub use analyzer::{Analyzer, AnalysisResult, Finding, RiskSeverity, FindingType, Impact};
 pub use parser::BeamPipelineParser;
 pub use reporting::{Reporter, JsonReporter, TextReporter};
 
