@@ -1287,15 +1287,369 @@ fn merge_results(result_sets: Vec<Vec<PyAnalysisResult>>) -> PyResult<Vec<PyAnal
 }
 
 // ============================================================================
+// PHASE 8: Risk scoring - Calculate overall risk score
+// ============================================================================
+
+#[pyfunction]
+fn calculate_risk_score(results: Vec<PyAnalysisResult>) -> PyResult<f64> {
+    let mut total_score = 0u32;
+    let mut finding_count = 0usize;
+
+    for result in results {
+        for finding in &result.findings {
+            total_score += finding.severity.score();
+            finding_count += 1;
+        }
+    }
+
+    if finding_count == 0 {
+        return Ok(0.0);
+    }
+
+    let avg_score = total_score as f64 / finding_count as f64;
+    Ok((avg_score / 5.0) * 100.0) // Normalize to 0-100 scale
+}
+
+// ============================================================================
+// PHASE 8: Finding recommendations - Suggest fixes
+// ============================================================================
+
+#[pyclass]
+#[derive(Clone)]
+pub struct PyFindingRecommendation {
+    pub finding_id: String,
+    pub recommendation: String,
+    pub priority: u32,
+    pub estimated_effort_hours: f32,
+}
+
+#[pymethods]
+impl PyFindingRecommendation {
+    #[getter]
+    fn get_finding_id(&self) -> String {
+        self.finding_id.clone()
+    }
+
+    #[getter]
+    fn get_recommendation(&self) -> String {
+        self.recommendation.clone()
+    }
+
+    #[getter]
+    fn get_priority(&self) -> u32 {
+        self.priority
+    }
+
+    #[getter]
+    fn get_estimated_effort_hours(&self) -> f32 {
+        self.estimated_effort_hours
+    }
+
+    fn __repr__(&self) -> String {
+        format!(
+            "FindingRecommendation(id='{}', priority={}, effort={}h)",
+            self.finding_id, self.priority, self.estimated_effort_hours
+        )
+    }
+}
+
+#[pyfunction]
+fn get_fix_recommendations(results: Vec<PyAnalysisResult>) -> PyResult<Vec<PyFindingRecommendation>> {
+    let mut recommendations = Vec::new();
+
+    for result in results {
+        for (idx, finding) in result.findings.iter().enumerate() {
+            let priority = finding.severity.score();
+            let effort = match priority {
+                5 => 4.0,  // Critical: 4 hours
+                4 => 3.0,  // High: 3 hours
+                3 => 2.0,  // Medium: 2 hours
+                2 => 1.0,  // Low: 1 hour
+                _ => 0.5,  // Info: 30 min
+            };
+
+            recommendations.push(PyFindingRecommendation {
+                finding_id: finding.id.clone(),
+                recommendation: finding.recommendation.clone().unwrap_or_else(|| {
+                    format!(
+                        "Address {} issue: {}",
+                        result.analyzer_name,
+                        finding.title
+                    )
+                }),
+                priority,
+                estimated_effort_hours: effort,
+            });
+        }
+    }
+
+    recommendations.sort_by(|a, b| {
+        b.priority
+            .cmp(&a.priority)
+            .then_with(|| b.estimated_effort_hours.partial_cmp(&a.estimated_effort_hours).unwrap())
+    });
+
+    Ok(recommendations)
+}
+
+// ============================================================================
+// PHASE 8: Analyzer performance metrics
+// ============================================================================
+
+#[pyclass]
+#[derive(Clone)]
+pub struct PyAnalyzerPerformance {
+    pub analyzer_name: String,
+    pub finding_count: usize,
+    pub avg_confidence: f32,
+    pub total_impact_score: u32,
+}
+
+#[pymethods]
+impl PyAnalyzerPerformance {
+    #[getter]
+    fn get_analyzer_name(&self) -> String {
+        self.analyzer_name.clone()
+    }
+
+    #[getter]
+    fn get_finding_count(&self) -> usize {
+        self.finding_count
+    }
+
+    #[getter]
+    fn get_avg_confidence(&self) -> f32 {
+        self.avg_confidence
+    }
+
+    #[getter]
+    fn get_total_impact_score(&self) -> u32 {
+        self.total_impact_score
+    }
+
+    fn __repr__(&self) -> String {
+        format!(
+            "AnalyzerPerformance(analyzer='{}', findings={}, confidence={:.2})",
+            self.analyzer_name, self.finding_count, self.avg_confidence
+        )
+    }
+}
+
+#[pyfunction]
+fn get_analyzer_performance(results: Vec<PyAnalysisResult>) -> PyResult<Vec<PyAnalyzerPerformance>> {
+    let mut performance = Vec::new();
+
+    for result in results {
+        if result.findings.is_empty() {
+            continue;
+        }
+
+        let avg_confidence = result.findings.iter().map(|f| f.confidence).sum::<f32>()
+            / result.findings.len() as f32;
+
+        let total_score: u32 = result.findings.iter().map(|f| f.severity.score()).sum();
+
+        performance.push(PyAnalyzerPerformance {
+            analyzer_name: result.analyzer_name,
+            finding_count: result.findings.len(),
+            avg_confidence,
+            total_impact_score: total_score,
+        });
+    }
+
+    performance.sort_by(|a, b| b.total_impact_score.cmp(&a.total_impact_score));
+    Ok(performance)
+}
+
+// ============================================================================
+// PHASE 9: Quality score - Overall result quality metric
+// ============================================================================
+
+#[pyfunction]
+fn calculate_quality_score(results: Vec<PyAnalysisResult>) -> PyResult<f32> {
+    if results.is_empty() {
+        return Ok(0.0);
+    }
+
+    let mut total_confidence = 0.0f32;
+    let mut finding_count = 0usize;
+
+    for result in results {
+        for finding in &result.findings {
+            total_confidence += finding.confidence;
+            finding_count += 1;
+        }
+    }
+
+    if finding_count == 0 {
+        return Ok(100.0); // Perfect quality if no findings
+    }
+
+    let avg_confidence = total_confidence / finding_count as f32;
+    Ok(avg_confidence * 100.0)
+}
+
+// ============================================================================
+// PHASE 9: Finding prioritization - Score and rank findings
+// ============================================================================
+
+#[pyclass]
+#[derive(Clone)]
+pub struct PyPrioritizedFinding {
+    pub finding_id: String,
+    pub priority_score: f32,
+    pub recommendation: String,
+}
+
+#[pymethods]
+impl PyPrioritizedFinding {
+    #[getter]
+    fn get_finding_id(&self) -> String {
+        self.finding_id.clone()
+    }
+
+    #[getter]
+    fn get_priority_score(&self) -> f32 {
+        self.priority_score
+    }
+
+    #[getter]
+    fn get_recommendation(&self) -> String {
+        self.recommendation.clone()
+    }
+
+    fn __repr__(&self) -> String {
+        format!(
+            "PrioritizedFinding(id='{}', score={:.2})",
+            self.finding_id, self.priority_score
+        )
+    }
+}
+
+#[pyfunction]
+fn prioritize_findings(results: Vec<PyAnalysisResult>) -> PyResult<Vec<PyPrioritizedFinding>> {
+    let mut prioritized = Vec::new();
+
+    for result in results {
+        for finding in result.findings {
+            let severity_weight = (finding.severity.score() as f32) / 5.0;
+            let confidence_weight = finding.confidence;
+            let priority_score = (severity_weight * 0.6 + confidence_weight * 0.4) * 100.0;
+
+            prioritized.push(PyPrioritizedFinding {
+                finding_id: finding.id,
+                priority_score,
+                recommendation: finding.recommendation.unwrap_or_else(|| finding.title),
+            });
+        }
+    }
+
+    prioritized.sort_by(|a, b| {
+        b.priority_score
+            .partial_cmp(&a.priority_score)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+
+    Ok(prioritized)
+}
+
+// ============================================================================
+// PHASE 9: Result snapshot - Capture point-in-time snapshot
+// ============================================================================
+
+#[pyclass]
+#[derive(Clone)]
+pub struct PyResultSnapshot {
+    pub timestamp_unix: i64,
+    pub total_findings: usize,
+    pub critical_count: usize,
+    pub analyzer_count: usize,
+    pub overall_risk_score: f32,
+}
+
+#[pymethods]
+impl PyResultSnapshot {
+    #[getter]
+    fn get_timestamp_unix(&self) -> i64 {
+        self.timestamp_unix
+    }
+
+    #[getter]
+    fn get_total_findings(&self) -> usize {
+        self.total_findings
+    }
+
+    #[getter]
+    fn get_critical_count(&self) -> usize {
+        self.critical_count
+    }
+
+    #[getter]
+    fn get_analyzer_count(&self) -> usize {
+        self.analyzer_count
+    }
+
+    #[getter]
+    fn get_overall_risk_score(&self) -> f32 {
+        self.overall_risk_score
+    }
+
+    fn __repr__(&self) -> String {
+        format!(
+            "ResultSnapshot(findings={}, critical={}, risk={:.1})",
+            self.total_findings, self.critical_count, self.overall_risk_score
+        )
+    }
+}
+
+#[pyfunction]
+fn create_result_snapshot(results: Vec<PyAnalysisResult>) -> PyResult<PyResultSnapshot> {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs() as i64;
+
+    let mut total_findings = 0usize;
+    let mut critical_count = 0usize;
+    let mut critical_score = 0u32;
+    let mut all_findings = 0usize;
+
+    for result in &results {
+        for finding in &result.findings {
+            total_findings += 1;
+            all_findings += 1;
+            if matches!(finding.severity, PyRiskSeverity::Critical) {
+                critical_count += 1;
+            }
+            critical_score += finding.severity.score();
+        }
+    }
+
+    let risk_score = if all_findings > 0 {
+        ((critical_score as f32 / all_findings as f32) / 5.0) * 100.0
+    } else {
+        0.0
+    };
+
+    Ok(PyResultSnapshot {
+        timestamp_unix: now,
+        total_findings,
+        critical_count,
+        analyzer_count: results.len(),
+        overall_risk_score: risk_score,
+    })
+}
+
+// ============================================================================
 // PYMODULE: Registration
 // ============================================================================
 
 #[pymodule]
 fn pybeamguard(_py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
-    m.add("__version__", "0.9.0")?;
+    m.add("__version__", "1.0.0")?;
     m.add(
         "__doc__",
-        "Apache Beam & Dataflow pipeline analysis with result comparison and analytics",
+        "Apache Beam & Dataflow pipeline analysis with risk scoring and finding prioritization",
     )?;
 
     // Register classes (Phase 1-2)
@@ -1319,6 +1673,12 @@ fn pybeamguard(_py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     // Register Phase 7 classes
     m.add_class::<PyResultComparison>()?;
     m.add_class::<PyAnalyzerRanking>()?;
+
+    // Register Phase 8-9 classes
+    m.add_class::<PyFindingRecommendation>()?;
+    m.add_class::<PyAnalyzerPerformance>()?;
+    m.add_class::<PyPrioritizedFinding>()?;
+    m.add_class::<PyResultSnapshot>()?;
 
     // Register functions (Phase 1-2)
     m.add_function(wrap_pyfunction!(analyze, m)?)?;
@@ -1351,6 +1711,16 @@ fn pybeamguard(_py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(rank_analyzers_by_impact, m)?)?;
     m.add_function(wrap_pyfunction!(search_findings, m)?)?;
     m.add_function(wrap_pyfunction!(merge_results, m)?)?;
+
+    // Register Phase 8 functions (Risk scoring & recommendations)
+    m.add_function(wrap_pyfunction!(calculate_risk_score, m)?)?;
+    m.add_function(wrap_pyfunction!(get_fix_recommendations, m)?)?;
+    m.add_function(wrap_pyfunction!(get_analyzer_performance, m)?)?;
+
+    // Register Phase 9 functions (Prioritization & snapshots)
+    m.add_function(wrap_pyfunction!(calculate_quality_score, m)?)?;
+    m.add_function(wrap_pyfunction!(prioritize_findings, m)?)?;
+    m.add_function(wrap_pyfunction!(create_result_snapshot, m)?)?;
 
     Ok(())
 }

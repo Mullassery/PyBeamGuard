@@ -51,6 +51,10 @@ try:
         PySeveritySummary as SeveritySummary,
         PyResultComparison as ResultComparison,
         PyAnalyzerRanking as AnalyzerRanking,
+        PyFindingRecommendation as FindingRecommendation,
+        PyAnalyzerPerformance as AnalyzerPerformance,
+        PyPrioritizedFinding as PrioritizedFinding,
+        PyResultSnapshot as ResultSnapshot,
         analyze,
         analyze_structured,
         parse_pipeline,
@@ -71,6 +75,12 @@ try:
         rank_analyzers_by_impact,
         search_findings,
         merge_results,
+        calculate_risk_score,
+        get_fix_recommendations,
+        get_analyzer_performance,
+        calculate_quality_score,
+        prioritize_findings,
+        create_result_snapshot,
     )
 except ImportError as e:
     # PyO3 bindings not available (development mode)
@@ -89,6 +99,10 @@ except ImportError as e:
     SeveritySummary = None
     ResultComparison = None
     AnalyzerRanking = None
+    FindingRecommendation = None
+    AnalyzerPerformance = None
+    PrioritizedFinding = None
+    ResultSnapshot = None
     analyze = None
     analyze_structured = None
     parse_pipeline = None
@@ -109,6 +123,12 @@ except ImportError as e:
     rank_analyzers_by_impact = None
     search_findings = None
     merge_results = None
+    calculate_risk_score = None
+    get_fix_recommendations = None
+    get_analyzer_performance = None
+    calculate_quality_score = None
+    prioritize_findings = None
+    create_result_snapshot = None
 
 __all__ = [
     "__version__",
@@ -126,6 +146,10 @@ __all__ = [
     "SeveritySummary",
     "ResultComparison",
     "AnalyzerRanking",
+    "FindingRecommendation",
+    "AnalyzerPerformance",
+    "PrioritizedFinding",
+    "ResultSnapshot",
     "analyze",
     "analyze_structured",
     "parse_pipeline",
@@ -146,4 +170,10 @@ __all__ = [
     "rank_analyzers_by_impact",
     "search_findings",
     "merge_results",
+    "calculate_risk_score",
+    "get_fix_recommendations",
+    "get_analyzer_performance",
+    "calculate_quality_score",
+    "prioritize_findings",
+    "create_result_snapshot",
 ]
