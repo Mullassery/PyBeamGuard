@@ -1,5 +1,6 @@
 use pyo3::prelude::*;
-use pybeamguard_core::{analyze_pipeline, DataProfile, PipelineIR as RustPipelineIR, TransformNode as RustTransformNode, Finding as RustFinding, AnalysisResult as RustAnalysisResult, RiskSeverity, FindingType, Impact, BeamPipelineParser};
+use pybeamguard_core::{analyze_pipeline, DataProfile, PipelineIR as RustPipelineIR, TransformNode as RustTransformNode, Finding as RustFinding, AnalysisResult as RustAnalysisResult, RiskSeverity, FindingType, Impact, BeamPipelineParser, AnalysisContext};
+use pybeamguard_core::analyzers::registry::{create_analyzers, create_analyzers_by_names};
 use std::collections::HashMap;
 
 // ============================================================================
@@ -531,18 +532,127 @@ fn parse_pipeline(code: String) -> PyResult<PyPipelineIR> {
 }
 
 // ============================================================================
+// PHASE 3: AnalyzerInfo - Information about available analyzers
+// ============================================================================
+
+#[pyclass]
+#[derive(Clone)]
+pub struct PyAnalyzerInfo {
+    pub name: String,
+    pub version: String,
+    pub priority: u32,
+}
+
+#[pymethods]
+impl PyAnalyzerInfo {
+    #[getter]
+    fn get_name(&self) -> String {
+        self.name.clone()
+    }
+
+    #[getter]
+    fn get_version(&self) -> String {
+        self.version.clone()
+    }
+
+    #[getter]
+    fn get_priority(&self) -> u32 {
+        self.priority
+    }
+
+    fn __repr__(&self) -> String {
+        format!("AnalyzerInfo(name='{}', version='{}', priority={})", self.name, self.version, self.priority)
+    }
+}
+
+// ============================================================================
+// PHASE 3: get_available_analyzers - List all analyzers
+// ============================================================================
+
+#[pyfunction]
+fn get_available_analyzers() -> PyResult<Vec<PyAnalyzerInfo>> {
+    let analyzers = create_analyzers();
+    let infos: Vec<PyAnalyzerInfo> = analyzers
+        .iter()
+        .map(|a| PyAnalyzerInfo {
+            name: a.name().to_string(),
+            version: a.version().to_string(),
+            priority: a.priority(),
+        })
+        .collect();
+
+    Ok(infos)
+}
+
+// ============================================================================
+// PHASE 3: analyze_with_analyzers - Selective analyzer execution
+// ============================================================================
+
+#[pyfunction]
+#[pyo3(signature = (code, analyzer_names, data_profile=None))]
+fn analyze_with_analyzers(
+    code: String,
+    analyzer_names: Vec<String>,
+    data_profile: Option<String>,
+) -> PyResult<Vec<PyAnalysisResult>> {
+    let profile = if let Some(profile_json) = data_profile {
+        match serde_json::from_str::<DataProfile>(&profile_json) {
+            Ok(p) => Some(p),
+            Err(e) => {
+                return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
+                    "Invalid data profile JSON: {}",
+                    e
+                )))
+            }
+        }
+    } else {
+        None
+    };
+
+    // Parse pipeline
+    let parser = BeamPipelineParser::new();
+    let ir = parser.parse(&code)
+        .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))?;
+
+    // Filter analyzers by name
+    let names: Vec<&str> = analyzer_names.iter().map(|s| s.as_str()).collect();
+    let analyzers = create_analyzers_by_names(&names);
+
+    if analyzers.is_empty() {
+        return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
+            format!("No analyzers matched: {:?}. Available: GraphAnalyzer, HotKeyAnalyzer, ShuffleAnalyzer, WindowingAnalyzer, StateAnalyzer, CostAnalyzer, ReliabilityAnalyzer, BestPracticesAnalyzer, DeploymentAnalyzer, SynthesisEngine", analyzer_names)
+        ));
+    }
+
+    // Run selected analyzers
+    let mut results = Vec::new();
+    for analyzer in analyzers {
+        match analyzer.analyze(&ir) {
+            Ok(result) => results.push(convert_analysis_result(&result)),
+            Err(e) => {
+                return Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
+                    format!("Analyzer {} failed: {}", analyzer.name(), e)
+                ))
+            }
+        }
+    }
+
+    Ok(results)
+}
+
+// ============================================================================
 // PYMODULE: Registration
 // ============================================================================
 
 #[pymodule]
 fn pybeamguard(_py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
-    m.add("__version__", "0.5.0")?;
+    m.add("__version__", "0.6.0")?;
     m.add(
         "__doc__",
-        "Apache Beam & Dataflow pipeline analysis with structured Python bindings",
+        "Apache Beam & Dataflow pipeline analysis with selective analyzer execution and inspection APIs",
     )?;
 
-    // Register classes
+    // Register classes (Phase 1-2)
     m.add_class::<PyRiskSeverity>()?;
     m.add_class::<PyImpact>()?;
     m.add_class::<PyFinding>()?;
@@ -550,10 +660,17 @@ fn pybeamguard(_py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyTransformNode>()?;
     m.add_class::<PyPipelineIR>()?;
 
-    // Register functions
+    // Register Phase 3 classes
+    m.add_class::<PyAnalyzerInfo>()?;
+
+    // Register functions (Phase 1-2)
     m.add_function(wrap_pyfunction!(analyze, m)?)?;
     m.add_function(wrap_pyfunction!(analyze_structured, m)?)?;
     m.add_function(wrap_pyfunction!(parse_pipeline, m)?)?;
+
+    // Register Phase 3 functions
+    m.add_function(wrap_pyfunction!(get_available_analyzers, m)?)?;
+    m.add_function(wrap_pyfunction!(analyze_with_analyzers, m)?)?;
 
     Ok(())
 }

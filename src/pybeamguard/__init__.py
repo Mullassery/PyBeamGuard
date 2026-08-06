@@ -45,9 +45,12 @@ try:
         PyAnalysisResult as AnalysisResult,
         PyTransformNode as TransformNode,
         PyPipelineIR as PipelineIR,
+        PyAnalyzerInfo as AnalyzerInfo,
         analyze,
         analyze_structured,
         parse_pipeline,
+        get_available_analyzers,
+        analyze_with_analyzers,
     )
 except ImportError as e:
     # PyO3 bindings not available (development mode)
@@ -60,9 +63,12 @@ except ImportError as e:
     AnalysisResult = None
     TransformNode = None
     PipelineIR = None
+    AnalyzerInfo = None
     analyze = None
     analyze_structured = None
     parse_pipeline = None
+    get_available_analyzers = None
+    analyze_with_analyzers = None
 
 __all__ = [
     "__version__",
@@ -74,7 +80,10 @@ __all__ = [
     "AnalysisResult",
     "TransformNode",
     "PipelineIR",
+    "AnalyzerInfo",
     "analyze",
     "analyze_structured",
     "parse_pipeline",
+    "get_available_analyzers",
+    "analyze_with_analyzers",
 ]
