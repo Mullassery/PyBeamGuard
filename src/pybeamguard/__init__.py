@@ -24,7 +24,7 @@ Visit: https://github.com/Mullassery/pybeamguard
 __version__ = "0.4.0"
 __author__ = "Georgi Mammen Mullassery"
 __email__ = "mullassery@gmail.com"
-__license__ = "MIT"
+__license__ = "Proprietary"
 
 try:
     from . import core
