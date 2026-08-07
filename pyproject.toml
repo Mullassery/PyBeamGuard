@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "pybeamguard"
-version = "1.0.0"
+version = "1.1.0"
 description = "Apache Beam & Dataflow pipeline analysis, reliability validation, and cost optimization platform"
 readme = "README.md"
 license = {text = "Proprietary License — Free to use with explicit attribution"}

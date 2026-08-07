@@ -22,7 +22,11 @@ impl PatternCache {
             groupby_re: Regex::new(r"GroupByKey|beam\.GroupByKey").unwrap(),
             windowing_re: Regex::new(r"Windowing|FixedWindows|SlidingWindows|SessionWindows")
                 .unwrap(),
-            sink_re: Regex::new(r"WriteToText|WriteToBigQuery|WriteToPubSub|beam\.io").unwrap(),
+            // `beam\.io\.Write` (not bare `beam\.io`) — the latter also
+            // matches `beam.io.ReadFromX(...)` source calls, misclassifying
+            // every source line as a sink too.
+            sink_re: Regex::new(r"WriteToText|WriteToBigQuery|WriteToPubSub|beam\.io\.Write")
+                .unwrap(),
         }
     }
 }
@@ -70,11 +74,13 @@ impl BeamPipelineParser {
                 self.add_source_transform(trimmed, line_num, ir);
             }
 
-            // Detect ParDo (stateful if contains @beam.utils.timestamp_utils or state)
-            if self.pattern_cache.pardo_re.is_match(trimmed)
-                && !trimmed.contains("|")
-                && !trimmed.starts_with('#')
-            {
+            // Detect ParDo (stateful if contains @beam.utils.timestamp_utils or state).
+            // Real Beam pipelines are conventionally written with the `|`
+            // pipe operator (`p | 'Name' >> beam.ParDo(...)`), so excluding
+            // lines containing `|` would silently miss ParDo in almost
+            // every idiomatically-written pipeline; comments are still
+            // excluded via `trimmed.starts_with('#')` above.
+            if self.pattern_cache.pardo_re.is_match(trimmed) {
                 self.add_pardo_transform(trimmed, line_num, ir);
             }
 
@@ -342,9 +348,13 @@ impl BeamPipelineParser {
     }
 
     fn extract_allowed_lateness(&self, line: &str) -> Option<u64> {
+        // "allowed_lateness(" is 17 bytes; skipping only 16 (as this used
+        // to) left the opening '(' inside `num_str`, so `.parse()` always
+        // failed and this function silently returned None for every input.
+        const PREFIX_LEN: usize = "allowed_lateness(".len();
         if let Some(start) = line.find("allowed_lateness(") {
-            if let Some(end) = line[start + 16..].find(')') {
-                let num_str = &line[start + 16..start + 16 + end];
+            if let Some(end) = line[start + PREFIX_LEN..].find(')') {
+                let num_str = &line[start + PREFIX_LEN..start + PREFIX_LEN + end];
                 return num_str.trim().parse().ok();
             }
         }
@@ -383,5 +393,242 @@ with beam.Pipeline() as p:
         let parser = BeamPipelineParser::new();
         let ir = parser.parse(code).unwrap();
         assert!(!ir.nodes.is_empty());
+    }
+
+    #[test]
+    fn test_parse_rejects_code_without_beam_import() {
+        let parser = BeamPipelineParser::new();
+        let result = parser.parse("print('hello world')");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_parse_detects_each_source_type() {
+        let parser = BeamPipelineParser::new();
+
+        for (snippet, expected_type) in [
+            ("import apache_beam as beam\nx = beam.io.ReadFromText('f.txt')", "text_file"),
+            ("import apache_beam as beam\nx = beam.io.ReadFromBigQuery(query='q')", "bigquery"),
+            ("import apache_beam as beam\nx = beam.io.ReadFromPubSub(topic='t')", "pubsub"),
+        ] {
+            let ir = parser.parse(snippet).unwrap();
+            let source = ir
+                .nodes
+                .iter()
+                .find(|n| matches!(&n.node_type, TransformType::Source { .. }))
+                .unwrap_or_else(|| panic!("no Source node detected for {snippet:?}"));
+            match &source.node_type {
+                TransformType::Source { source_type } => assert_eq!(source_type, expected_type),
+                _ => unreachable!(),
+            }
+        }
+    }
+
+    #[test]
+    fn test_parse_detects_each_sink_type() {
+        let parser = BeamPipelineParser::new();
+
+        for (snippet, expected_type) in [
+            ("import apache_beam as beam\nx | beam.io.WriteToText('f.txt')", "text"),
+            ("import apache_beam as beam\nx | beam.io.WriteToBigQuery(table='t')", "bigquery"),
+            ("import apache_beam as beam\nx | beam.io.WriteToPubSub(topic='t')", "pubsub"),
+        ] {
+            let ir = parser.parse(snippet).unwrap();
+            let sink = ir
+                .nodes
+                .iter()
+                .find(|n| matches!(&n.node_type, TransformType::Sink { .. }))
+                .unwrap_or_else(|| panic!("no Sink node detected for {snippet:?}"));
+            match &sink.node_type {
+                TransformType::Sink { sink_type } => assert_eq!(sink_type, expected_type),
+                _ => unreachable!(),
+            }
+        }
+    }
+
+    #[test]
+    fn test_parse_pardo_flags_stateful_and_side_inputs() {
+        let parser = BeamPipelineParser::new();
+        let code = r#"
+import apache_beam as beam
+x = beam.ParDo(MyStatefulFn(), StateSpec('count'))
+y = beam.ParDo(MyFn(), side=beam.pvalue.AsSingleton(other))
+z = beam.ParDo(PlainFn())
+"#;
+        let ir = parser.parse(code).unwrap();
+        let pardos: Vec<_> = ir
+            .nodes
+            .iter()
+            .filter_map(|n| match &n.node_type {
+                TransformType::ParDo { is_stateful, has_side_inputs, .. } => {
+                    Some((*is_stateful, *has_side_inputs))
+                }
+                _ => None,
+            })
+            .collect();
+
+        assert_eq!(pardos.len(), 3);
+        assert!(pardos.iter().any(|(stateful, _)| *stateful));
+        assert!(pardos.iter().any(|(_, side)| *side));
+        assert!(pardos.iter().any(|(stateful, side)| !stateful && !side));
+    }
+
+    #[test]
+    fn test_parse_windowing_extracts_type_duration_and_lateness() {
+        let parser = BeamPipelineParser::new();
+        let code = r#"
+import apache_beam as beam
+x = beam.WindowInto(FixedWindows(seconds(60)), allowed_lateness(300))
+"#;
+        let ir = parser.parse(code).unwrap();
+        let windowing = ir
+            .nodes
+            .iter()
+            .find(|n| matches!(&n.node_type, TransformType::Windowing { .. }))
+            .unwrap();
+
+        match &windowing.node_type {
+            TransformType::Windowing {
+                window_type,
+                duration_sec,
+                allowed_lateness_sec,
+                ..
+            } => {
+                assert_eq!(window_type, "fixed");
+                assert_eq!(*duration_sec, Some(60));
+                assert_eq!(*allowed_lateness_sec, Some(300));
+            }
+            _ => unreachable!(),
+        }
+    }
+
+    #[test]
+    fn test_parse_windowing_distinguishes_sliding_and_session() {
+        let parser = BeamPipelineParser::new();
+
+        let sliding = parser
+            .parse("import apache_beam as beam\nx = beam.WindowInto(SlidingWindows(seconds(30)))")
+            .unwrap();
+        let session = parser
+            .parse("import apache_beam as beam\nx = beam.WindowInto(SessionWindows(gap_size=seconds(10)))")
+            .unwrap();
+
+        let window_type = |ir: &PipelineIR| {
+            ir.nodes
+                .iter()
+                .find_map(|n| match &n.node_type {
+                    TransformType::Windowing { window_type, .. } => Some(window_type.clone()),
+                    _ => None,
+                })
+                .unwrap()
+        };
+        assert_eq!(window_type(&sliding), "sliding");
+        assert_eq!(window_type(&session), "session");
+    }
+
+    #[test]
+    fn test_parse_detects_groupby_combine_cogroup() {
+        let parser = BeamPipelineParser::new();
+        let code = r#"
+import apache_beam as beam
+a = x | beam.GroupByKey()
+b = y | beam.CombinePerKey(sum)
+c = z | beam.CoGroupByKey()
+"#;
+        let ir = parser.parse(code).unwrap();
+
+        assert!(ir.nodes.iter().any(|n| matches!(n.node_type, TransformType::GroupByKey { .. })));
+        assert!(ir.nodes.iter().any(|n| matches!(n.node_type, TransformType::CombinePerKey { .. })));
+        assert!(ir.nodes.iter().any(|n| matches!(n.node_type, TransformType::CoGroupByKey { .. })));
+    }
+
+    #[test]
+    fn test_parse_detects_flatten_and_partition() {
+        let parser = BeamPipelineParser::new();
+        let code = r#"
+import apache_beam as beam
+a = (x, y) | beam.Flatten()
+b = x | beam.Partition(fn, 2)
+"#;
+        let ir = parser.parse(code).unwrap();
+
+        assert!(ir.nodes.iter().any(|n| matches!(n.node_type, TransformType::Flatten)));
+        assert!(ir.nodes.iter().any(|n| matches!(n.node_type, TransformType::Partition)));
+    }
+
+    #[test]
+    fn test_parse_skips_comments_and_blank_lines() {
+        let parser = BeamPipelineParser::new();
+        let code = r#"
+import apache_beam as beam
+
+# x = beam.io.ReadFromText('should_be_ignored.txt')
+
+x = beam.io.ReadFromText('real.txt')
+"#;
+        let ir = parser.parse(code).unwrap();
+        let sources: Vec<_> = ir
+            .nodes
+            .iter()
+            .filter(|n| matches!(n.node_type, TransformType::Source { .. }))
+            .collect();
+        assert_eq!(sources.len(), 1);
+    }
+
+    #[test]
+    fn test_build_edges_connects_nodes_sequentially() {
+        let parser = BeamPipelineParser::new();
+        let code = r#"
+import apache_beam as beam
+a = beam.io.ReadFromText('f.txt')
+b = beam.ParDo(MyFn())
+c = beam.io.WriteToText('out.txt')
+"#;
+        let ir = parser.parse(code).unwrap();
+
+        assert_eq!(ir.edges.len(), ir.nodes.len().saturating_sub(1));
+        for (i, edge) in ir.edges.iter().enumerate() {
+            assert_eq!(edge.from, ir.nodes[i].id);
+            assert_eq!(edge.to, ir.nodes[i + 1].id);
+        }
+    }
+
+    #[test]
+    fn test_parse_realistic_pipeline_detects_all_stages_in_order() {
+        let parser = BeamPipelineParser::new();
+        let code = r#"
+import apache_beam as beam
+
+with beam.Pipeline() as p:
+    result = (
+        p
+        | 'Read' >> beam.io.ReadFromPubSub(topic='projects/x/topics/y')
+        | 'Parse' >> beam.ParDo(ParseFn())
+        | 'Window' >> beam.WindowInto(FixedWindows(seconds(60)))
+        | 'Group' >> beam.GroupByKey()
+        | 'Aggregate' >> beam.CombinePerKey(sum)
+        | 'Write' >> beam.io.WriteToBigQuery(table='dataset.table')
+    )
+"#;
+        let ir = parser.parse(code).unwrap();
+
+        let types: Vec<&str> = ir
+            .nodes
+            .iter()
+            .map(|n| match &n.node_type {
+                TransformType::Source { .. } => "source",
+                TransformType::ParDo { .. } => "pardo",
+                TransformType::Windowing { .. } => "windowing",
+                TransformType::GroupByKey { .. } => "groupby",
+                TransformType::CombinePerKey { .. } => "combine",
+                TransformType::Sink { .. } => "sink",
+                _ => "other",
+            })
+            .collect();
+
+        assert_eq!(
+            types,
+            vec!["source", "pardo", "windowing", "groupby", "combine", "sink"]
+        );
     }
 }

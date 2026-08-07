@@ -6,8 +6,8 @@ Analyze Beam pipelines pre-deployment to identify bottlenecks, reliability risks
 
 > The definitive static analysis platform for Apache Beam, Flink, and Spark pipelines.
 
-[![Build Status](https://img.shields.io/badge/build-passing-brightgreen)](https://github.com/Mullassery/PyBeamGuard)
-[![Version](https://img.shields.io/badge/version-0.4.0-blue)](https://github.com/Mullassery/PyBeamGuard/releases)
+[![CI](https://github.com/Mullassery/PyBeamGuard/actions/workflows/ci.yml/badge.svg)](https://github.com/Mullassery/PyBeamGuard/actions/workflows/ci.yml)
+[![Version](https://img.shields.io/badge/version-1.1.0-blue)](https://github.com/Mullassery/PyBeamGuard/releases)
 [![License](https://img.shields.io/badge/license-Proprietary-blue)](LICENSE)
 [![PyPI](https://img.shields.io/badge/PyPI-pybeamguard-blue)](https://pypi.org/project/pybeamguard/)
 
@@ -315,7 +315,7 @@ cargo test --release
 - ✅ Multi-framework support (Beam, Flink, Spark)
 - ✅ Ecosystem integrations (Airflow, dbt, data contracts)
 - ✅ Governance layer (org policies, audit logs)
-- ✅ 19 tests passing (95%+ coverage)
+- ✅ 29 tests passing (real CI: see badge above)
 - ✅ <500ms analysis per pipeline
 
 **Future Roadmap:**
