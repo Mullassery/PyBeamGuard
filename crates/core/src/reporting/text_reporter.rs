@@ -11,7 +11,10 @@ impl Reporter for TextReporter {
         let total_findings: usize = results.iter().map(|r| r.findings.len()).sum();
         let total_score: u32 = results.iter().map(|r| r.total_score()).sum();
 
-        output.push_str(&format!("Overall Risk Score: {}/100\n", (total_score as f32 / 50.0).min(100.0) as u32));
+        output.push_str(&format!(
+            "Overall Risk Score: {}/100\n",
+            (total_score as f32 / 50.0).min(100.0) as u32
+        ));
         output.push_str(&format!("Total Findings: {}\n\n", total_findings));
 
         // Group findings by severity
@@ -41,7 +44,10 @@ impl Reporter for TextReporter {
                 if let Some(rec) = &finding.recommendation {
                     output.push_str(&format!("    → {}\n", rec));
                 }
-                output.push_str(&format!("    Confidence: {:.0}%\n\n", finding.confidence * 100.0));
+                output.push_str(&format!(
+                    "    Confidence: {:.0}%\n\n",
+                    finding.confidence * 100.0
+                ));
             }
         }
 
@@ -54,12 +60,15 @@ impl Reporter for TextReporter {
                     output.push_str(&format!("    → {}\n", rec));
                 }
             }
-            output.push_str("\n");
+            output.push('\n');
         }
 
         if !medium.is_empty() {
             output.push_str("🟡 MEDIUM PRIORITY ISSUES\n");
-            output.push_str(&format!("Found {} medium-priority issue(s). Review when convenient.\n\n", medium.len()));
+            output.push_str(&format!(
+                "Found {} medium-priority issue(s). Review when convenient.\n\n",
+                medium.len()
+            ));
         }
 
         if !low.is_empty() {
@@ -74,7 +83,7 @@ impl Reporter for TextReporter {
             for (key, value) in &result.metrics {
                 output.push_str(&format!("  {}: {:.2}\n", key, value));
             }
-            output.push_str("\n");
+            output.push('\n');
         }
 
         output

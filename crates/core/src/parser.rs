@@ -189,7 +189,9 @@ impl BeamPipelineParser {
     }
 
     fn add_combineperkey_transform(&self, line: &str, line_num: usize, ir: &mut PipelineIR) {
-        let combine_fn = self.extract_dofn_name(line).unwrap_or("CombineFn".to_string());
+        let combine_fn = self
+            .extract_dofn_name(line)
+            .unwrap_or("CombineFn".to_string());
         ir.nodes.push(TransformNode {
             id: self.generate_id("CombinePerKey"),
             name: "CombinePerKey".to_string(),
@@ -312,9 +314,7 @@ impl BeamPipelineParser {
     }
 
     fn extract_var_name(&self, line: &str) -> Option<String> {
-        line.split('=')
-            .next()
-            .map(|s| s.trim().to_string())
+        line.split('=').next().map(|s| s.trim().to_string())
     }
 
     fn extract_dofn_name(&self, line: &str) -> Option<String> {
@@ -407,9 +407,18 @@ with beam.Pipeline() as p:
         let parser = BeamPipelineParser::new();
 
         for (snippet, expected_type) in [
-            ("import apache_beam as beam\nx = beam.io.ReadFromText('f.txt')", "text_file"),
-            ("import apache_beam as beam\nx = beam.io.ReadFromBigQuery(query='q')", "bigquery"),
-            ("import apache_beam as beam\nx = beam.io.ReadFromPubSub(topic='t')", "pubsub"),
+            (
+                "import apache_beam as beam\nx = beam.io.ReadFromText('f.txt')",
+                "text_file",
+            ),
+            (
+                "import apache_beam as beam\nx = beam.io.ReadFromBigQuery(query='q')",
+                "bigquery",
+            ),
+            (
+                "import apache_beam as beam\nx = beam.io.ReadFromPubSub(topic='t')",
+                "pubsub",
+            ),
         ] {
             let ir = parser.parse(snippet).unwrap();
             let source = ir
@@ -429,9 +438,18 @@ with beam.Pipeline() as p:
         let parser = BeamPipelineParser::new();
 
         for (snippet, expected_type) in [
-            ("import apache_beam as beam\nx | beam.io.WriteToText('f.txt')", "text"),
-            ("import apache_beam as beam\nx | beam.io.WriteToBigQuery(table='t')", "bigquery"),
-            ("import apache_beam as beam\nx | beam.io.WriteToPubSub(topic='t')", "pubsub"),
+            (
+                "import apache_beam as beam\nx | beam.io.WriteToText('f.txt')",
+                "text",
+            ),
+            (
+                "import apache_beam as beam\nx | beam.io.WriteToBigQuery(table='t')",
+                "bigquery",
+            ),
+            (
+                "import apache_beam as beam\nx | beam.io.WriteToPubSub(topic='t')",
+                "pubsub",
+            ),
         ] {
             let ir = parser.parse(snippet).unwrap();
             let sink = ir
@@ -460,9 +478,11 @@ z = beam.ParDo(PlainFn())
             .nodes
             .iter()
             .filter_map(|n| match &n.node_type {
-                TransformType::ParDo { is_stateful, has_side_inputs, .. } => {
-                    Some((*is_stateful, *has_side_inputs))
-                }
+                TransformType::ParDo {
+                    is_stateful,
+                    has_side_inputs,
+                    ..
+                } => Some((*is_stateful, *has_side_inputs)),
                 _ => None,
             })
             .collect();
@@ -537,9 +557,18 @@ c = z | beam.CoGroupByKey()
 "#;
         let ir = parser.parse(code).unwrap();
 
-        assert!(ir.nodes.iter().any(|n| matches!(n.node_type, TransformType::GroupByKey { .. })));
-        assert!(ir.nodes.iter().any(|n| matches!(n.node_type, TransformType::CombinePerKey { .. })));
-        assert!(ir.nodes.iter().any(|n| matches!(n.node_type, TransformType::CoGroupByKey { .. })));
+        assert!(ir
+            .nodes
+            .iter()
+            .any(|n| matches!(n.node_type, TransformType::GroupByKey { .. })));
+        assert!(ir
+            .nodes
+            .iter()
+            .any(|n| matches!(n.node_type, TransformType::CombinePerKey { .. })));
+        assert!(ir
+            .nodes
+            .iter()
+            .any(|n| matches!(n.node_type, TransformType::CoGroupByKey { .. })));
     }
 
     #[test]
@@ -552,8 +581,14 @@ b = x | beam.Partition(fn, 2)
 "#;
         let ir = parser.parse(code).unwrap();
 
-        assert!(ir.nodes.iter().any(|n| matches!(n.node_type, TransformType::Flatten)));
-        assert!(ir.nodes.iter().any(|n| matches!(n.node_type, TransformType::Partition)));
+        assert!(ir
+            .nodes
+            .iter()
+            .any(|n| matches!(n.node_type, TransformType::Flatten)));
+        assert!(ir
+            .nodes
+            .iter()
+            .any(|n| matches!(n.node_type, TransformType::Partition)));
     }
 
     #[test]

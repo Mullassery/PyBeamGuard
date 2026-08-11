@@ -20,17 +20,20 @@ impl Analyzer for BestPracticesAnalyzer {
         8
     }
 
-    fn analyze(&self, ir: &PipelineIR) -> anyhow::Result<AnalysisResult> {
+    fn analyze(&self, ctx: &AnalysisContext) -> anyhow::Result<AnalysisResult> {
+        let ir = &ctx.pipeline_ir;
         let mut findings = Vec::new();
         let mut metrics = HashMap::new();
         let mut rule_violations = 0;
 
         // Rule 1: Prefer CombinePerKey over GroupByKey
-        let groupbykey_count = ir.nodes
+        let groupbykey_count = ir
+            .nodes
             .iter()
             .filter(|n| matches!(n.node_type, TransformType::GroupByKey { .. }))
             .count();
-        let combineperkey_count = ir.nodes
+        let combineperkey_count = ir
+            .nodes
             .iter()
             .filter(|n| matches!(n.node_type, TransformType::CombinePerKey { .. }))
             .count();
@@ -47,7 +50,8 @@ impl Analyzer for BestPracticesAnalyzer {
                      CombinePerKey is 20-30% faster and parallelizable.",
                     groupbykey_count, combineperkey_count
                 ),
-                affected_nodes: ir.nodes
+                affected_nodes: ir
+                    .nodes
                     .iter()
                     .filter(|n| matches!(n.node_type, TransformType::GroupByKey { .. }))
                     .map(|n| n.id.clone())
@@ -55,7 +59,7 @@ impl Analyzer for BestPracticesAnalyzer {
                 recommendation: Some(
                     "Analyze GroupByKey operations. Replace with CombinePerKey where applicable: \
                      beam.CombinePerKey(SumFn()) instead of GroupByKey().CombineValues(sum)"
-                        .to_string()
+                        .to_string(),
                 ),
                 estimated_impact: Some(Impact {
                     latency_multiplier: Some(0.75),
@@ -89,14 +93,17 @@ impl Analyzer for BestPracticesAnalyzer {
         }
 
         // Rule 3: Large object side inputs
-        let large_side_inputs = ir.nodes
+        let large_side_inputs = ir
+            .nodes
             .iter()
             .filter(|n| {
-                if let TransformType::ParDo { has_side_inputs: true, .. } = n.node_type {
-                    true
-                } else {
-                    false
-                }
+                matches!(
+                    n.node_type,
+                    TransformType::ParDo {
+                        has_side_inputs: true,
+                        ..
+                    }
+                )
             })
             .count();
 
@@ -123,7 +130,8 @@ impl Analyzer for BestPracticesAnalyzer {
         }
 
         // Rule 4: Multiple shuffles (reshuffling)
-        let shuffle_ops: Vec<_> = ir.nodes
+        let shuffle_ops: Vec<_> = ir
+            .nodes
             .iter()
             .filter(|n| n.node_type.is_shuffle_operation())
             .collect();
@@ -177,9 +185,15 @@ impl Analyzer for BestPracticesAnalyzer {
         }
 
         metrics.insert("groupbykey_count".to_string(), groupbykey_count as f64);
-        metrics.insert("combineperkey_count".to_string(), combineperkey_count as f64);
+        metrics.insert(
+            "combineperkey_count".to_string(),
+            combineperkey_count as f64,
+        );
         metrics.insert("side_input_count".to_string(), large_side_inputs as f64);
-        metrics.insert("shuffle_operation_count".to_string(), shuffle_ops.len() as f64);
+        metrics.insert(
+            "shuffle_operation_count".to_string(),
+            shuffle_ops.len() as f64,
+        );
         metrics.insert("rule_violations".to_string(), rule_violations as f64);
 
         Ok(AnalysisResult {
@@ -203,15 +217,20 @@ impl BestPracticesAnalyzer {
         for (i, node) in ir.nodes.iter().enumerate() {
             if let TransformType::ParDo { dofn_name, .. } = &node.node_type {
                 // Check for identity ParDo (common mistake)
-                if dofn_name.to_lowercase().contains("identity") ||
-                   dofn_name.to_lowercase().contains("passthrough") ||
-                   dofn_name.to_lowercase().contains("noop") {
+                if dofn_name.to_lowercase().contains("identity")
+                    || dofn_name.to_lowercase().contains("passthrough")
+                    || dofn_name.to_lowercase().contains("noop")
+                {
                     redundant.push(node.id.clone());
                 }
 
                 // Check for consecutive identical ParDo
                 if i > 0 {
-                    if let TransformType::ParDo { dofn_name: prev_name, .. } = &ir.nodes[i - 1].node_type {
+                    if let TransformType::ParDo {
+                        dofn_name: prev_name,
+                        ..
+                    } = &ir.nodes[i - 1].node_type
+                    {
                         if dofn_name == prev_name {
                             redundant.push(node.id.clone());
                         }
@@ -243,7 +262,14 @@ mod tests {
         });
 
         let analyzer = BestPracticesAnalyzer;
-        let result = analyzer.analyze(&ir).unwrap();
-        assert!(result.findings.iter().any(|f| f.id == "BESTPRAC_PREFER_COMBINEPERKEY"));
+        let ctx = AnalysisContext {
+            pipeline_ir: ir,
+            data_profile: None,
+        };
+        let result = analyzer.analyze(&ctx).unwrap();
+        assert!(result
+            .findings
+            .iter()
+            .any(|f| f.id == "BESTPRAC_PREFER_COMBINEPERKEY"));
     }
 }

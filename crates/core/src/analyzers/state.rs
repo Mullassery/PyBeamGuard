@@ -17,7 +17,8 @@ impl Analyzer for StateAnalyzer {
         5
     }
 
-    fn analyze(&self, ir: &PipelineIR) -> anyhow::Result<AnalysisResult> {
+    fn analyze(&self, ctx: &AnalysisContext) -> anyhow::Result<AnalysisResult> {
+        let ir = &ctx.pipeline_ir;
         let mut findings = Vec::new();
         let mut metrics = HashMap::new();
 
@@ -96,9 +97,10 @@ impl Analyzer for StateAnalyzer {
                 ..
             } = &node.node_type
             {
-                if dofn_name.to_lowercase().contains("user") ||
-                   dofn_name.to_lowercase().contains("customer") ||
-                   dofn_name.to_lowercase().contains("session") {
+                if dofn_name.to_lowercase().contains("user")
+                    || dofn_name.to_lowercase().contains("customer")
+                    || dofn_name.to_lowercase().contains("session")
+                {
                     findings.push(Finding {
                         id: "STATE_HIGH_CARDINALITY".to_string(),
                         severity: RiskSeverity::High,
@@ -129,7 +131,10 @@ impl Analyzer for StateAnalyzer {
             version: self.version().to_string(),
             findings,
             metrics,
-            summary: format!("Found {} stateful operation(s); state management requires careful review", op_count),
+            summary: format!(
+                "Found {} stateful operation(s); state management requires careful review",
+                op_count
+            ),
             confidence: 0.80,
         })
     }
@@ -168,7 +173,11 @@ mod tests {
         });
 
         let analyzer = StateAnalyzer;
-        let result = analyzer.analyze(&ir).unwrap();
+        let ctx = AnalysisContext {
+            pipeline_ir: ir,
+            data_profile: None,
+        };
+        let result = analyzer.analyze(&ctx).unwrap();
         assert!(!result.findings.is_empty());
     }
 }

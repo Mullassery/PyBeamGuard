@@ -1,5 +1,4 @@
 use crate::analyzer::*;
-use crate::ir::*;
 use std::collections::HashMap;
 
 pub struct DeploymentAnalyzer;
@@ -17,7 +16,8 @@ impl Analyzer for DeploymentAnalyzer {
         9
     }
 
-    fn analyze(&self, ir: &PipelineIR) -> anyhow::Result<AnalysisResult> {
+    fn analyze(&self, ctx: &AnalysisContext) -> anyhow::Result<AnalysisResult> {
+        let ir = &ctx.pipeline_ir;
         let mut findings = Vec::new();
         let mut metrics = HashMap::new();
 
@@ -161,9 +161,30 @@ impl Analyzer for DeploymentAnalyzer {
                 }
             }
 
-            metrics.insert("has_machine_type".to_string(), if config.worker_machine_type.is_some() { 1.0 } else { 0.0 });
-            metrics.insert("has_autoscaling".to_string(), if config.max_workers.is_some() { 1.0 } else { 0.0 });
-            metrics.insert("has_streaming_engine".to_string(), if config.streaming_engine == Some(true) { 1.0 } else { 0.0 });
+            metrics.insert(
+                "has_machine_type".to_string(),
+                if config.worker_machine_type.is_some() {
+                    1.0
+                } else {
+                    0.0
+                },
+            );
+            metrics.insert(
+                "has_autoscaling".to_string(),
+                if config.max_workers.is_some() {
+                    1.0
+                } else {
+                    0.0
+                },
+            );
+            metrics.insert(
+                "has_streaming_engine".to_string(),
+                if config.streaming_engine == Some(true) {
+                    1.0
+                } else {
+                    0.0
+                },
+            );
         } else {
             findings.push(Finding {
                 id: "DEPLOY_NO_CONFIG".to_string(),
@@ -200,12 +221,17 @@ impl Analyzer for DeploymentAnalyzer {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ir::PipelineIR;
 
     #[test]
     fn test_no_deployment_config() {
         let ir = PipelineIR::new("test".to_string());
         let analyzer = DeploymentAnalyzer;
-        let result = analyzer.analyze(&ir).unwrap();
+        let ctx = AnalysisContext {
+            pipeline_ir: ir,
+            data_profile: None,
+        };
+        let result = analyzer.analyze(&ctx).unwrap();
         // Should flag missing config
         assert!(!result.findings.is_empty() || result.findings.is_empty());
     }

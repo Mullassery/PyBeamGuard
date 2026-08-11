@@ -1,5 +1,8 @@
+use super::{
+    best_practices, cost, deployment, graph, hotkey, reliability, shuffle, state, synthesis,
+    windowing,
+};
 use crate::analyzer::Analyzer;
-use super::{graph, hotkey, shuffle, windowing, state, cost, reliability, best_practices, deployment, synthesis};
 
 pub fn create_analyzers() -> Vec<Box<dyn Analyzer>> {
     vec![

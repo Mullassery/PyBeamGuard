@@ -52,7 +52,8 @@ impl Analyzer for SynthesisEngine {
         10 // Run last, after all other analyzers
     }
 
-    fn analyze(&self, ir: &PipelineIR) -> anyhow::Result<AnalysisResult> {
+    fn analyze(&self, ctx: &AnalysisContext) -> anyhow::Result<AnalysisResult> {
+        let ir = &ctx.pipeline_ir;
         let mut findings = Vec::new();
         let mut metrics = HashMap::new();
 
@@ -62,14 +63,16 @@ impl Analyzer for SynthesisEngine {
         let cost_efficiency_score = self.calculate_cost_efficiency_score(ir);
 
         // Overall score: weighted average
-        let overall_risk_score = (performance_score * 0.35 +
-                                 reliability_score * 0.35 +
-                                 cost_efficiency_score * 0.30);
+        let overall_risk_score =
+            performance_score * 0.35 + reliability_score * 0.35 + cost_efficiency_score * 0.30;
 
         metrics.insert("overall_risk_score".to_string(), overall_risk_score as f64);
         metrics.insert("performance_score".to_string(), performance_score as f64);
         metrics.insert("reliability_score".to_string(), reliability_score as f64);
-        metrics.insert("cost_efficiency_score".to_string(), cost_efficiency_score as f64);
+        metrics.insert(
+            "cost_efficiency_score".to_string(),
+            cost_efficiency_score as f64,
+        );
 
         // Determine overall risk level
         let risk_level = if overall_risk_score >= 80.0 {
@@ -85,7 +88,11 @@ impl Analyzer for SynthesisEngine {
         let summary = format!(
             "PyBeamGuard Executive Summary: Overall Risk Score {:.0}/100 ({}) | \
              Performance {:.0} | Reliability {:.0} | Cost Efficiency {:.0}",
-            overall_risk_score, risk_level, performance_score, reliability_score, cost_efficiency_score
+            overall_risk_score,
+            risk_level,
+            performance_score,
+            reliability_score,
+            cost_efficiency_score
         );
 
         findings.push(Finding {
@@ -128,7 +135,8 @@ impl SynthesisEngine {
         let mut score = 100.0;
 
         // Penalize for each shuffle operation (-10 per shuffle)
-        let shuffle_count = ir.nodes
+        let shuffle_count = ir
+            .nodes
             .iter()
             .filter(|n| n.node_type.is_shuffle_operation())
             .count();
@@ -141,14 +149,16 @@ impl SynthesisEngine {
         }
 
         // Bonus for CombinePerKey usage (+10 per)
-        let combine_count = ir.nodes
+        let combine_count = ir
+            .nodes
             .iter()
             .filter(|n| matches!(n.node_type, TransformType::CombinePerKey { .. }))
             .count();
         score += (combine_count as f32) * 10.0;
 
         // Penalize for hot key risk (-15)
-        let groupbykey_count = ir.nodes
+        let groupbykey_count = ir
+            .nodes
             .iter()
             .filter(|n| matches!(n.node_type, TransformType::GroupByKey { .. }))
             .count();
@@ -156,7 +166,7 @@ impl SynthesisEngine {
             score -= 15.0;
         }
 
-        score.max(0.0).min(100.0)
+        score.clamp(0.0, 100.0)
     }
 
     fn calculate_reliability_score(&self, ir: &PipelineIR) -> f32 {
@@ -168,7 +178,8 @@ impl SynthesisEngine {
         }
 
         // Penalize for stateful operations without proper error handling (-15)
-        let stateful_count = ir.nodes
+        let stateful_count = ir
+            .nodes
             .iter()
             .filter(|n| n.node_type.is_stateful())
             .count();
@@ -177,7 +188,8 @@ impl SynthesisEngine {
         }
 
         // Penalize for parsing-like operations without side outputs (-10)
-        let parsing_ops = ir.nodes
+        let parsing_ops = ir
+            .nodes
             .iter()
             .filter(|n| {
                 if let TransformType::ParDo { dofn_name, .. } = &n.node_type {
@@ -192,17 +204,16 @@ impl SynthesisEngine {
         }
 
         // Penalize for streaming without windowing (-20)
-        let is_streaming = ir.get_source_nodes()
-            .iter()
-            .any(|s| {
-                if let TransformType::Source { source_type } = &s.node_type {
-                    source_type.contains("pubsub") || source_type.contains("kafka")
-                } else {
-                    false
-                }
-            });
+        let is_streaming = ir.get_source_nodes().iter().any(|s| {
+            if let TransformType::Source { source_type } = &s.node_type {
+                source_type.contains("pubsub") || source_type.contains("kafka")
+            } else {
+                false
+            }
+        });
 
-        let has_windowing = ir.nodes
+        let has_windowing = ir
+            .nodes
             .iter()
             .any(|n| matches!(n.node_type, TransformType::Windowing { .. }));
 
@@ -210,14 +221,15 @@ impl SynthesisEngine {
             score -= 20.0;
         }
 
-        score.max(0.0).min(100.0)
+        score.clamp(0.0, 100.0)
     }
 
     fn calculate_cost_efficiency_score(&self, ir: &PipelineIR) -> f32 {
         let mut score = 100.0;
 
         // Penalize for multiple shuffles (-20 per extra shuffle)
-        let shuffle_count = ir.nodes
+        let shuffle_count = ir
+            .nodes
             .iter()
             .filter(|n| n.node_type.is_shuffle_operation())
             .count();
@@ -226,7 +238,8 @@ impl SynthesisEngine {
         }
 
         // Penalize for stateful operations without time-based cleanup (-15 per operation)
-        let stateful_count = ir.nodes
+        let stateful_count = ir
+            .nodes
             .iter()
             .filter(|n| n.node_type.is_stateful())
             .count();
@@ -248,7 +261,7 @@ impl SynthesisEngine {
             }
         }
 
-        score.max(0.0).min(100.0)
+        score.clamp(0.0, 100.0)
     }
 }
 
@@ -260,7 +273,11 @@ mod tests {
     fn test_synthesis_scoring() {
         let ir = PipelineIR::new("test".to_string());
         let engine = SynthesisEngine;
-        let result = engine.analyze(&ir).unwrap();
+        let ctx = AnalysisContext {
+            pipeline_ir: ir,
+            data_profile: None,
+        };
+        let result = engine.analyze(&ctx).unwrap();
 
         // Score should be 0-100
         assert!(result.metrics.get("overall_risk_score").unwrap() >= &0.0);

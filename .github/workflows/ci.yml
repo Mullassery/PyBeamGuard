@@ -19,6 +19,8 @@ jobs:
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
 
       - name: Cache cargo registry
         uses: actions/cache@v4
@@ -37,8 +39,62 @@ jobs:
 
       - name: Check formatting
         run: cargo fmt --all -- --check
-        continue-on-error: true
 
       - name: Clippy
         run: cargo clippy --workspace -- -D warnings
-        continue-on-error: true
+
+  python-bindings:
+    name: Python bindings smoke test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-py-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install maturin and pytest
+        run: python -m pip install --upgrade pip maturin pytest
+
+      # This is the actual PyPI distribution path: build the wheel with
+      # maturin (the same tool `release.yml` / the publish step uses) and
+      # install it into this venv, then import the compiled extension
+      # module and run a real analysis -- verifying end-to-end that what
+      # gets published to PyPI actually works, not just `cargo test`.
+      - name: Build and install the wheel with maturin
+        run: python -m maturin develop --release
+
+      - name: Import smoke test (real analysis through the built wheel)
+        run: |
+          python -c "
+          import pybeamguard
+          assert pybeamguard.core is not None, 'native extension failed to import'
+          with open('examples/pipeline_simple.py') as f:
+              code = f.read()
+          results = pybeamguard.core.analyze_structured(code)
+          assert len(results) == 10, f'expected 10 analyzer results, got {len(results)}'
+          print('OK:', len(results), 'analyzer results')
+          "
+
+      - name: Console script smoke test
+        run: pybeamguard analyze examples/pipeline_simple.py --format json > /dev/null
+
+      - name: Run Python test suite
+        run: pytest tests/ -v

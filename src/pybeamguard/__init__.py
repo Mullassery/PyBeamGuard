@@ -7,18 +7,20 @@ reliability risks, and cost optimization opportunities.
 Features:
 - 10 intelligent analyzers (Graph, HotKey, Shuffle, Windowing, State, Cost,
   Reliability, BestPractices, Deployment, Architecture Review)
-- Pre-deployment cost forecasting
-- Multi-framework support (Beam, Flink, Spark)
-- CI/CD integration (GitHub, GitLab, Jenkins)
-- Org governance (cost budgets, SLOs, audit logs)
+- Pre-deployment cost forecasting (heuristic estimate; see README)
+- Apache Beam pattern detection for Flink and Spark source files (regex-based
+  occurrence counting, not full checkpoint/state/shuffle analysis)
+- CI/CD-friendly: `--fail-on <severity>` gates the process exit code so any
+  CI system (GitHub Actions, GitLab CI, Jenkins, ...) can fail a build on it
 - Structured Python bindings for programmatic access
 - Completely free, no licensing tiers
 
 Example:
     $ pybeamguard analyze pipeline.py
     $ pybeamguard analyze pipeline.py --format json
+    $ pybeamguard analyze pipeline.py --fail-on critical
 
-    # Python API (v1.0.0+)
+    # Python API
     from pybeamguard import core
     results = core.analyze_structured(pipeline_code)
     for result in results:
@@ -29,7 +31,16 @@ Example:
 Visit: https://github.com/Mullassery/pybeamguard
 """
 
-__version__ = "1.0.0"
+try:
+    # Single source of truth: the version pip/maturin recorded at install
+    # time (from pyproject.toml), so this never drifts from a hardcoded
+    # literal the way a previous version of this file did (it was stuck at
+    # "1.0.0" while the package had moved on to later releases).
+    from importlib.metadata import version as _pkg_version
+
+    __version__ = _pkg_version("pybeamguard")
+except Exception:  # pragma: no cover - only hit on a broken/uninstalled package
+    __version__ = "0.0.0+unknown"
 __author__ = "Georgi Mammen Mullassery"
 __email__ = "mullassery@gmail.com"
 __license__ = "Proprietary"

@@ -13,9 +13,11 @@ impl FrameworkParser for FlinkFrameworkParser {
         let mut ir = PipelineIR::new("flink_pipeline".to_string());
 
         // Detect Flink source operators
-        if let Some(_) = Regex::new(r"from_source|StreamExecutionEnvironment::execute_sql")
+        if Regex::new(r"from_source|StreamExecutionEnvironment::execute_sql")
             .ok()
-            .and_then(|re| re.find(code)) {
+            .and_then(|re| re.find(code))
+            .is_some()
+        {
             // Parse source configuration
         }
 
@@ -24,19 +26,26 @@ impl FrameworkParser for FlinkFrameworkParser {
         let stateful_count = stateful_ops_pattern.find_iter(code).count();
 
         // Detect windowing operations
-        let windowing_pattern = Regex::new(r"TumblingEventTimeWindows|SlidingEventTimeWindows|SessionWindows")?;
+        let windowing_pattern =
+            Regex::new(r"TumblingEventTimeWindows|SlidingEventTimeWindows|SessionWindows")?;
         let windowing_count = windowing_pattern.find_iter(code).count();
 
         // Set metadata
         if stateful_count > 0 {
-            ir.metadata.runner_hints.insert("has_state".to_string(), "true".to_string());
+            ir.metadata
+                .runner_hints
+                .insert("has_state".to_string(), "true".to_string());
         }
 
         if windowing_count > 0 {
-            ir.metadata.runner_hints.insert("windowing_types".to_string(), windowing_count.to_string());
+            ir.metadata
+                .runner_hints
+                .insert("windowing_types".to_string(), windowing_count.to_string());
         }
 
-        ir.metadata.runner_hints.insert("framework".to_string(), "flink".to_string());
+        ir.metadata
+            .runner_hints
+            .insert("framework".to_string(), "flink".to_string());
 
         Ok(ir)
     }

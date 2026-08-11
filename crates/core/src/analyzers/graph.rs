@@ -17,7 +17,8 @@ impl Analyzer for GraphAnalyzer {
         1 // Run first
     }
 
-    fn analyze(&self, ir: &PipelineIR) -> anyhow::Result<AnalysisResult> {
+    fn analyze(&self, ctx: &AnalysisContext) -> anyhow::Result<AnalysisResult> {
+        let ir = &ctx.pipeline_ir;
         let mut findings = Vec::new();
         let mut metrics = HashMap::new();
 
@@ -111,10 +112,10 @@ impl GraphAnalyzer {
         let mut rec_stack = HashSet::new();
 
         for node in &ir.nodes {
-            if !visited.contains(&node.id) {
-                if self.has_cycle_dfs(ir, &node.id, &mut visited, &mut rec_stack) {
-                    return true;
-                }
+            if !visited.contains(&node.id)
+                && self.has_cycle_dfs(ir, &node.id, &mut visited, &mut rec_stack)
+            {
+                return true;
             }
         }
 
@@ -191,12 +192,7 @@ impl GraphAnalyzer {
     fn calculate_max_fan_in(&self, ir: &PipelineIR) -> usize {
         ir.nodes
             .iter()
-            .map(|n| {
-                ir.edges
-                    .iter()
-                    .filter(|e| e.to == n.id)
-                    .count()
-            })
+            .map(|n| ir.edges.iter().filter(|e| e.to == n.id).count())
             .max()
             .unwrap_or(0)
     }
@@ -204,12 +200,7 @@ impl GraphAnalyzer {
     fn calculate_max_fan_out(&self, ir: &PipelineIR) -> usize {
         ir.nodes
             .iter()
-            .map(|n| {
-                ir.edges
-                    .iter()
-                    .filter(|e| e.from == n.id)
-                    .count()
-            })
+            .map(|n| ir.edges.iter().filter(|e| e.from == n.id).count())
             .max()
             .unwrap_or(0)
     }
@@ -235,12 +226,7 @@ impl GraphAnalyzer {
                 for down in downstream {
                     if let TransformType::ParDo { .. } = down.node_type {
                         // Both are ParDo with single connection - can fuse
-                        if ir.edges
-                            .iter()
-                            .filter(|e| e.from == node.id)
-                            .count()
-                            == 1
-                        {
+                        if ir.edges.iter().filter(|e| e.from == node.id).count() == 1 {
                             opportunities.push(node.name.clone());
                             break;
                         }
@@ -274,7 +260,11 @@ mod tests {
         });
 
         let analyzer = GraphAnalyzer;
-        let result = analyzer.analyze(&ir).unwrap();
+        let ctx = AnalysisContext {
+            pipeline_ir: ir,
+            data_profile: None,
+        };
+        let result = analyzer.analyze(&ctx).unwrap();
         assert_eq!(result.findings.len(), 0); // No issues with single node
     }
 }

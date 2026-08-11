@@ -1,30 +1,19 @@
-pub mod ir;
-pub mod parser;
 pub mod analyzer;
 pub mod analyzers;
-pub mod reporting;
-pub mod commercial;
 pub mod frameworks;
-pub mod ecosystem;
+pub mod ir;
+pub mod parser;
+pub mod reporting;
 
-pub use ir::{PipelineIR, TransformNode, TransformType, Edge, PipelineMetadata, Runner, DeploymentConfig};
-pub use analyzer::{Analyzer, AnalysisResult, Finding, RiskSeverity, FindingType, Impact};
+pub use analyzer::{
+    AnalysisContext, AnalysisResult, Analyzer, DataProfile, Finding, FindingType, Impact,
+    RiskSeverity,
+};
+pub use ir::{
+    DeploymentConfig, Edge, PipelineIR, PipelineMetadata, Runner, TransformNode, TransformType,
+};
 pub use parser::BeamPipelineParser;
-pub use reporting::{Reporter, JsonReporter, TextReporter};
-
-#[derive(Debug, Clone)]
-pub struct AnalysisContext {
-    pub pipeline_ir: PipelineIR,
-    pub data_profile: Option<DataProfile>,
-}
-
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct DataProfile {
-    pub estimated_throughput_per_sec: Option<f64>,
-    pub average_element_size_bytes: Option<usize>,
-    pub key_cardinality: Option<usize>,
-    pub estimated_state_size_gb: Option<f64>,
-}
+pub use reporting::{JsonReporter, Reporter, TextReporter};
 
 pub fn analyze_pipeline(
     python_code: &str,
@@ -42,7 +31,7 @@ pub fn analyze_pipeline(
     let mut results = Vec::new();
 
     for analyzer in analyzers {
-        match analyzer.analyze(&context.pipeline_ir) {
+        match analyzer.analyze(&context) {
             Ok(result) => results.push(result),
             Err(e) => {
                 log::warn!("Analyzer {} failed: {}", analyzer.name(), e);

@@ -1,6 +1,11 @@
-use pybeamguard_core::{analyze_pipeline, reporting::TextReporter, reporting::JsonReporter, reporting::Reporter, DataProfile};
+use pybeamguard_core::{
+    analyze_pipeline, reporting::JsonReporter, reporting::Reporter, reporting::TextReporter,
+    DataProfile, RiskSeverity,
+};
 use std::fs;
 use std::io::Read;
+
+const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
@@ -18,6 +23,7 @@ fn main() {
             cmd_analyze(&arg_strs);
         }
         "help" | "--help" | "-h" => print_help(),
+        "version" | "--version" | "-v" => println!("pybeamguard {VERSION}"),
         _ => {
             eprintln!("Unknown command: {}", command);
             print_help();
@@ -26,15 +32,30 @@ fn main() {
     }
 }
 
+/// Parse a `--fail-on` severity argument. Returns `None` for unrecognized values.
+fn parse_severity(s: &str) -> Option<RiskSeverity> {
+    match s.to_lowercase().as_str() {
+        "info" => Some(RiskSeverity::Info),
+        "low" => Some(RiskSeverity::Low),
+        "medium" => Some(RiskSeverity::Medium),
+        "high" => Some(RiskSeverity::High),
+        "critical" => Some(RiskSeverity::Critical),
+        _ => None,
+    }
+}
+
 fn cmd_analyze(args: &[&str]) {
     if args.is_empty() {
-        eprintln!("Usage: pybeamguard analyze <pipeline.py> [--data-profile <profile.json>] [--format json|text]");
+        eprintln!(
+            "Usage: pybeamguard analyze <pipeline.py> [--data-profile <profile.json>] [--format json|text] [--fail-on <severity>]"
+        );
         std::process::exit(1);
     }
 
     let pipeline_file = args[0];
     let mut format = "text";
     let mut data_profile_file: Option<&str> = None;
+    let mut fail_on: Option<RiskSeverity> = None;
 
     // Parse options
     let mut i = 1;
@@ -58,6 +79,26 @@ fn cmd_analyze(args: &[&str]) {
                     std::process::exit(1);
                 }
             }
+            "--fail-on" => {
+                if i + 1 < args.len() {
+                    match parse_severity(args[i + 1]) {
+                        Some(sev) => fail_on = Some(sev),
+                        None => {
+                            eprintln!(
+                                "Invalid --fail-on value '{}'. Expected one of: info, low, medium, high, critical",
+                                args[i + 1]
+                            );
+                            std::process::exit(1);
+                        }
+                    }
+                    i += 2;
+                } else {
+                    eprintln!(
+                        "--fail-on requires a severity value (info|low|medium|high|critical)"
+                    );
+                    std::process::exit(1);
+                }
+            }
             _ => {
                 i += 1;
             }
@@ -66,8 +107,8 @@ fn cmd_analyze(args: &[&str]) {
 
     // Read pipeline file
     let mut pipeline_code = String::new();
-    if let Err(e) = fs::File::open(pipeline_file)
-        .and_then(|mut f| f.read_to_string(&mut pipeline_code))
+    if let Err(e) =
+        fs::File::open(pipeline_file).and_then(|mut f| f.read_to_string(&mut pipeline_code))
     {
         eprintln!("Error reading pipeline file '{}': {}", pipeline_file, e);
         std::process::exit(1);
@@ -76,8 +117,8 @@ fn cmd_analyze(args: &[&str]) {
     // Parse data profile if provided
     let data_profile = if let Some(profile_file) = data_profile_file {
         let mut profile_json = String::new();
-        if let Err(e) = fs::File::open(profile_file)
-            .and_then(|mut f| f.read_to_string(&mut profile_json))
+        if let Err(e) =
+            fs::File::open(profile_file).and_then(|mut f| f.read_to_string(&mut profile_json))
         {
             eprintln!("Error reading data profile file '{}': {}", profile_file, e);
             std::process::exit(1);
@@ -99,9 +140,25 @@ fn cmd_analyze(args: &[&str]) {
         Ok(results) => {
             let output = match format {
                 "json" => JsonReporter.format(&results),
-                "text" | _ => TextReporter.format(&results),
+                _ => TextReporter.format(&results),
             };
             println!("{}", output);
+
+            if let Some(threshold) = fail_on {
+                let threshold_score = threshold.score();
+                let breached = results
+                    .iter()
+                    .flat_map(|r| r.findings.iter())
+                    .any(|f| f.severity.score() >= threshold_score);
+
+                if breached {
+                    eprintln!(
+                        "\n--fail-on {}: at least one finding meets or exceeds this severity.",
+                        args_fail_on_display(threshold)
+                    );
+                    std::process::exit(1);
+                }
+            }
         }
         Err(e) => {
             eprintln!("Analysis failed: {}", e);
@@ -110,21 +167,34 @@ fn cmd_analyze(args: &[&str]) {
     }
 }
 
+fn args_fail_on_display(sev: RiskSeverity) -> &'static str {
+    match sev {
+        RiskSeverity::Info => "info",
+        RiskSeverity::Low => "low",
+        RiskSeverity::Medium => "medium",
+        RiskSeverity::High => "high",
+        RiskSeverity::Critical => "critical",
+    }
+}
+
 fn print_help() {
     println!(
-        r#"PyBeamGuard v0.4.0 - Apache Beam & Dataflow Analysis Platform
+        r#"PyBeamGuard v{VERSION} - Apache Beam & Dataflow Analysis Platform
 
 USAGE:
     pybeamguard <COMMAND> [OPTIONS]
 
 COMMANDS:
     analyze             Analyze a Beam pipeline
+    version             Show version and exit
     help                Show this help message
 
 OPTIONS for 'analyze':
     <pipeline.py>           Path to Beam pipeline Python file (required)
     --data-profile FILE     Path to data profile JSON file (optional)
     --format FORMAT         Output format: text (default) or json
+    --fail-on SEVERITY      Exit non-zero if any finding is >= this severity
+                             (info|low|medium|high|critical)
 
 EXAMPLES:
     # Analyze a pipeline
@@ -135,6 +205,9 @@ EXAMPLES:
 
     # JSON output
     pybeamguard analyze pipeline.py --format json
+
+    # CI gating: fail the build on critical findings
+    pybeamguard analyze pipeline.py --fail-on critical
 
 DATA PROFILE FORMAT:
     {{

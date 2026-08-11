@@ -17,24 +17,26 @@ impl Analyzer for WindowingAnalyzer {
         4
     }
 
-    fn analyze(&self, ir: &PipelineIR) -> anyhow::Result<AnalysisResult> {
+    fn analyze(&self, ctx: &AnalysisContext) -> anyhow::Result<AnalysisResult> {
+        let ir = &ctx.pipeline_ir;
         let mut findings = Vec::new();
         let mut metrics = HashMap::new();
 
         let windowing_ops = self.find_windowing_operations(ir);
         let windowing_count = windowing_ops.len();
-        metrics.insert("windowing_operation_count".to_string(), windowing_count as f64);
+        metrics.insert(
+            "windowing_operation_count".to_string(),
+            windowing_count as f64,
+        );
 
         // Check if this appears to be a streaming pipeline
-        let is_streaming = ir.get_source_nodes()
-            .iter()
-            .any(|s| {
-                if let TransformType::Source { source_type } = &s.node_type {
-                    source_type.contains("pubsub") || source_type.contains("kafka")
-                } else {
-                    false
-                }
-            });
+        let is_streaming = ir.get_source_nodes().iter().any(|s| {
+            if let TransformType::Source { source_type } = &s.node_type {
+                source_type.contains("pubsub") || source_type.contains("kafka")
+            } else {
+                false
+            }
+        });
 
         // For batch pipelines with no windowing, no findings
         if !is_streaming && windowing_ops.is_empty() {
@@ -143,7 +145,10 @@ impl Analyzer for WindowingAnalyzer {
             findings,
             metrics,
             summary: if is_streaming {
-                format!("Streaming pipeline with {} windowing operation(s)", windowing_count)
+                format!(
+                    "Streaming pipeline with {} windowing operation(s)",
+                    windowing_count
+                )
             } else {
                 "Batch pipeline detected".to_string()
             },
@@ -186,7 +191,11 @@ mod tests {
         });
 
         let analyzer = WindowingAnalyzer;
-        let result = analyzer.analyze(&ir).unwrap();
+        let ctx = AnalysisContext {
+            pipeline_ir: ir,
+            data_profile: None,
+        };
+        let result = analyzer.analyze(&ctx).unwrap();
         // Should flag missing allowed lateness if streaming
         assert!(!result.findings.is_empty() || result.findings.is_empty());
     }

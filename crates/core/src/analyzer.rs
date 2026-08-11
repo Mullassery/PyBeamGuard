@@ -1,5 +1,5 @@
-use serde::{Deserialize, Serialize};
 use crate::ir::PipelineIR;
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "UPPERCASE")]
@@ -64,11 +64,32 @@ pub struct AnalysisResult {
     pub confidence: f32,
 }
 
+/// Optional, caller-supplied statistics about the runtime characteristics of
+/// a pipeline (throughput, element size, key cardinality, state size).
+/// Analyzers may use this to replace their flat, heuristic assumptions with
+/// figures closer to the pipeline's real behavior. All fields are optional:
+/// an absent field means "fall back to the built-in heuristic".
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DataProfile {
+    pub estimated_throughput_per_sec: Option<f64>,
+    pub average_element_size_bytes: Option<usize>,
+    pub key_cardinality: Option<usize>,
+    pub estimated_state_size_gb: Option<f64>,
+}
+
+/// Everything an [`Analyzer`] needs to inspect a pipeline: the parsed IR,
+/// plus an optional [`DataProfile`] with real-world runtime statistics.
+#[derive(Debug, Clone)]
+pub struct AnalysisContext {
+    pub pipeline_ir: PipelineIR,
+    pub data_profile: Option<DataProfile>,
+}
+
 pub trait Analyzer: Send + Sync {
     fn name(&self) -> &str;
     fn version(&self) -> &str;
     fn priority(&self) -> u32;
-    fn analyze(&self, ir: &PipelineIR) -> anyhow::Result<AnalysisResult>;
+    fn analyze(&self, ctx: &AnalysisContext) -> anyhow::Result<AnalysisResult>;
 }
 
 impl AnalysisResult {

@@ -17,12 +17,16 @@ impl Analyzer for ShuffleAnalyzer {
         3
     }
 
-    fn analyze(&self, ir: &PipelineIR) -> anyhow::Result<AnalysisResult> {
+    fn analyze(&self, ctx: &AnalysisContext) -> anyhow::Result<AnalysisResult> {
+        let ir = &ctx.pipeline_ir;
         let mut findings = Vec::new();
         let mut metrics = HashMap::new();
 
         let shuffle_ops = self.find_shuffle_operations(ir);
-        metrics.insert("shuffle_operation_count".to_string(), shuffle_ops.len() as f64);
+        metrics.insert(
+            "shuffle_operation_count".to_string(),
+            shuffle_ops.len() as f64,
+        );
 
         if shuffle_ops.is_empty() {
             return Ok(AnalysisResult {
@@ -170,12 +174,7 @@ impl ShuffleAnalyzer {
             }
         }
 
-        consecutive.sort_by_key(|n| {
-            ir.edges
-                .iter()
-                .filter(|e| e.to == n.id)
-                .count()
-        });
+        consecutive.sort_by_key(|n| ir.edges.iter().filter(|e| e.to == n.id).count());
 
         consecutive
     }
@@ -200,7 +199,11 @@ mod tests {
         });
 
         let analyzer = ShuffleAnalyzer;
-        let result = analyzer.analyze(&ir).unwrap();
+        let ctx = AnalysisContext {
+            pipeline_ir: ir,
+            data_profile: None,
+        };
+        let result = analyzer.analyze(&ctx).unwrap();
         assert!(!result.findings.is_empty());
     }
 }

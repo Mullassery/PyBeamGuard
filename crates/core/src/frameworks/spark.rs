@@ -29,16 +29,27 @@ impl FrameworkParser for SparkFrameworkParser {
         let has_output_mode = output_mode_pattern.is_match(code);
 
         // Set metadata
-        ir.metadata.runner_hints.insert("framework".to_string(), "spark".to_string());
-        ir.metadata.runner_hints.insert("sources".to_string(), source_count.to_string());
-        ir.metadata.runner_hints.insert("has_stateful_ops".to_string(), (stateful_count > 0).to_string());
+        ir.metadata
+            .runner_hints
+            .insert("framework".to_string(), "spark".to_string());
+        ir.metadata
+            .runner_hints
+            .insert("sources".to_string(), source_count.to_string());
+        ir.metadata.runner_hints.insert(
+            "has_stateful_ops".to_string(),
+            (stateful_count > 0).to_string(),
+        );
 
         if has_trigger {
-            ir.metadata.runner_hints.insert("trigger_configured".to_string(), "true".to_string());
+            ir.metadata
+                .runner_hints
+                .insert("trigger_configured".to_string(), "true".to_string());
         }
 
         if has_output_mode {
-            ir.metadata.runner_hints.insert("output_mode_configured".to_string(), "true".to_string());
+            ir.metadata
+                .runner_hints
+                .insert("output_mode_configured".to_string(), "true".to_string());
         }
 
         Ok(ir)

@@ -1,6 +1,22 @@
-use pyo3::prelude::*;
-use pybeamguard_core::{analyze_pipeline, DataProfile, PipelineIR as RustPipelineIR, TransformNode as RustTransformNode, Finding as RustFinding, AnalysisResult as RustAnalysisResult, RiskSeverity, FindingType, Impact, BeamPipelineParser, AnalysisContext, Reporter, JsonReporter, TextReporter};
+// pyo3 0.29 is deprecating the automatic `FromPyObject` impl it derives for
+// `#[pyclass(..)] + Clone` types (a future release will require opting in
+// via `#[pyclass(from_py_object)]` per type). Several functions in this
+// module (e.g. `merge_results`, `compare_results`, `deduplicate_findings`)
+// accept `Vec<PyAnalysisResult>` etc. as *parameters*, which relies on that
+// derived `FromPyObject` impl today. Auditing and annotating all ~14
+// pyclasses individually is out of scope for this pass and risks silently
+// changing which types remain callable-with as arguments from Python; allow
+// the deprecation crate-wide instead of guessing per type. Revisit on the
+// next pyo3 upgrade.
+#![allow(deprecated)]
+
 use pybeamguard_core::analyzers::registry::{create_analyzers, create_analyzers_by_names};
+use pybeamguard_core::{
+    analyze_pipeline, AnalysisContext, AnalysisResult as RustAnalysisResult, BeamPipelineParser,
+    DataProfile, Finding as RustFinding, Impact, JsonReporter, PipelineIR as RustPipelineIR,
+    Reporter, RiskSeverity, TextReporter, TransformNode as RustTransformNode,
+};
+use pyo3::prelude::*;
 use std::collections::HashMap;
 
 // ============================================================================
@@ -525,7 +541,8 @@ fn analyze_structured(
 #[pyfunction]
 fn parse_pipeline(code: String) -> PyResult<PyPipelineIR> {
     let parser = BeamPipelineParser::new();
-    let ir = parser.parse(&code)
+    let ir = parser
+        .parse(&code)
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))?;
 
     Ok(convert_pipeline_ir(&ir))
@@ -561,7 +578,10 @@ impl PyAnalyzerInfo {
     }
 
     fn __repr__(&self) -> String {
-        format!("AnalyzerInfo(name='{}', version='{}', priority={})", self.name, self.version, self.priority)
+        format!(
+            "AnalyzerInfo(name='{}', version='{}', priority={})",
+            self.name, self.version, self.priority
+        )
     }
 }
 
@@ -611,8 +631,13 @@ fn analyze_with_analyzers(
 
     // Parse pipeline
     let parser = BeamPipelineParser::new();
-    let ir = parser.parse(&code)
+    let ir = parser
+        .parse(&code)
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))?;
+    let ctx = AnalysisContext {
+        pipeline_ir: ir,
+        data_profile: profile,
+    };
 
     // Filter analyzers by name
     let names: Vec<&str> = analyzer_names.iter().map(|s| s.as_str()).collect();
@@ -627,12 +652,14 @@ fn analyze_with_analyzers(
     // Run selected analyzers
     let mut results = Vec::new();
     for analyzer in analyzers {
-        match analyzer.analyze(&ir) {
+        match analyzer.analyze(&ctx) {
             Ok(result) => results.push(convert_analysis_result(&result)),
             Err(e) => {
-                return Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
-                    format!("Analyzer {} failed: {}", analyzer.name(), e)
-                ))
+                return Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(format!(
+                    "Analyzer {} failed: {}",
+                    analyzer.name(),
+                    e
+                )))
             }
         }
     }
@@ -645,6 +672,7 @@ fn analyze_with_analyzers(
 // ============================================================================
 
 #[pyfunction]
+#[pyo3(signature = (code, data_profile=None))]
 fn get_json_report(code: String, data_profile: Option<String>) -> PyResult<String> {
     let profile = if let Some(profile_json) = data_profile {
         match serde_json::from_str::<DataProfile>(&profile_json) {
@@ -672,6 +700,7 @@ fn get_json_report(code: String, data_profile: Option<String>) -> PyResult<Strin
 // ============================================================================
 
 #[pyfunction]
+#[pyo3(signature = (code, data_profile=None))]
 fn get_text_report(code: String, data_profile: Option<String>) -> PyResult<String> {
     let profile = if let Some(profile_json) = data_profile {
         match serde_json::from_str::<DataProfile>(&profile_json) {
@@ -722,28 +751,35 @@ fn analyze_and_format(
 
     // Parse pipeline
     let parser = BeamPipelineParser::new();
-    let ir = parser.parse(&code)
+    let ir = parser
+        .parse(&code)
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))?;
+    let ctx = AnalysisContext {
+        pipeline_ir: ir,
+        data_profile: profile,
+    };
 
     // Filter analyzers by name
     let names: Vec<&str> = analyzer_names.iter().map(|s| s.as_str()).collect();
     let analyzers = create_analyzers_by_names(&names);
 
     if analyzers.is_empty() {
-        return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
-            format!("No analyzers matched: {:?}", analyzer_names)
-        ));
+        return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
+            "No analyzers matched: {:?}",
+            analyzer_names
+        )));
     }
 
     // Run selected analyzers
     let mut results = Vec::new();
     for analyzer in analyzers {
-        match analyzer.analyze(&ir) {
+        match analyzer.analyze(&ctx) {
             Ok(result) => results.push(result),
             Err(e) => {
-                return Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
-                    format!("Analyzer failed: {}", e)
-                ))
+                return Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(format!(
+                    "Analyzer failed: {}",
+                    e
+                )))
             }
         }
     }
@@ -758,9 +794,10 @@ fn analyze_and_format(
             let reporter = TextReporter;
             Ok(reporter.format(&results))
         }
-        _ => Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
-            format!("Unknown format '{}'. Use 'json' or 'text'", report_format)
-        )),
+        _ => Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
+            "Unknown format '{}'. Use 'json' or 'text'",
+            report_format
+        ))),
     }
 }
 
@@ -771,7 +808,8 @@ fn analyze_and_format(
 #[pyfunction]
 fn get_pipeline_complexity_score(code: String) -> PyResult<f64> {
     let parser = BeamPipelineParser::new();
-    let ir = parser.parse(&code)
+    let ir = parser
+        .parse(&code)
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))?;
 
     let nodes = ir.nodes.len() as f64;
@@ -831,7 +869,11 @@ impl PyPipelineSummary {
     fn __repr__(&self) -> String {
         format!(
             "PipelineSummary(name='{}', nodes={}, edges={}, sources={}, sinks={}, complexity={})",
-            self.name, self.node_count, self.edge_count, self.source_count, self.sink_count,
+            self.name,
+            self.node_count,
+            self.edge_count,
+            self.source_count,
+            self.sink_count,
             self.complexity
         )
     }
@@ -840,7 +882,8 @@ impl PyPipelineSummary {
 #[pyfunction]
 fn get_pipeline_summary(code: String) -> PyResult<PyPipelineSummary> {
     let parser = BeamPipelineParser::new();
-    let ir = parser.parse(&code)
+    let ir = parser
+        .parse(&code)
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))?;
 
     let source_count = ir.get_source_nodes().len();
@@ -862,11 +905,16 @@ fn get_pipeline_summary(code: String) -> PyResult<PyPipelineSummary> {
 // ============================================================================
 
 #[pyfunction]
-fn filter_findings_by_severity(results: Vec<PyAnalysisResult>, min_severity: u32) -> PyResult<Vec<PyAnalysisResult>> {
+fn filter_findings_by_severity(
+    results: Vec<PyAnalysisResult>,
+    min_severity: u32,
+) -> PyResult<Vec<PyAnalysisResult>> {
     let filtered: Vec<PyAnalysisResult> = results
         .into_iter()
         .map(|mut result| {
-            result.findings.retain(|f| f.severity.score() >= min_severity);
+            result
+                .findings
+                .retain(|f| f.severity.score() >= min_severity);
             result
         })
         .collect();
@@ -881,7 +929,8 @@ fn filter_findings_by_severity(results: Vec<PyAnalysisResult>, min_severity: u32
 #[pyfunction]
 fn get_node_types_in_pipeline(code: String) -> PyResult<std::collections::HashMap<String, usize>> {
     let parser = BeamPipelineParser::new();
-    let ir = parser.parse(&code)
+    let ir = parser
+        .parse(&code)
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))?;
 
     let mut type_counts: HashMap<String, usize> = HashMap::new();
@@ -970,7 +1019,8 @@ impl PyPipelineStats {
 #[pyfunction]
 fn get_pipeline_stats(code: String) -> PyResult<PyPipelineStats> {
     let parser = BeamPipelineParser::new();
-    let ir = parser.parse(&code)
+    let ir = parser
+        .parse(&code)
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))?;
 
     let source_count = ir.get_source_nodes().len();
@@ -1050,7 +1100,11 @@ impl PySeveritySummary {
     fn __repr__(&self) -> String {
         format!(
             "SeveritySummary(critical={}, high={}, medium={}, low={}, info={})",
-            self.critical_count, self.high_count, self.medium_count, self.low_count, self.info_count
+            self.critical_count,
+            self.high_count,
+            self.medium_count,
+            self.low_count,
+            self.info_count
         )
     }
 }
@@ -1147,7 +1201,10 @@ impl PyResultComparison {
     fn __repr__(&self) -> String {
         format!(
             "ResultComparison(added={}, removed={}, unchanged={}, severity_changed={})",
-            self.findings_added, self.findings_removed, self.findings_unchanged, self.severity_changed
+            self.findings_added,
+            self.findings_removed,
+            self.findings_unchanged,
+            self.severity_changed
         )
     }
 }
@@ -1235,7 +1292,7 @@ fn rank_analyzers_by_impact(results: Vec<PyAnalysisResult>) -> PyResult<Vec<PyAn
         });
     }
 
-    rankings.sort_by(|a, b| b.finding_count.cmp(&a.finding_count));
+    rankings.sort_by_key(|r| std::cmp::Reverse(r.finding_count));
     Ok(rankings)
 }
 
@@ -1354,28 +1411,26 @@ impl PyFindingRecommendation {
 }
 
 #[pyfunction]
-fn get_fix_recommendations(results: Vec<PyAnalysisResult>) -> PyResult<Vec<PyFindingRecommendation>> {
+fn get_fix_recommendations(
+    results: Vec<PyAnalysisResult>,
+) -> PyResult<Vec<PyFindingRecommendation>> {
     let mut recommendations = Vec::new();
 
     for result in results {
-        for (idx, finding) in result.findings.iter().enumerate() {
+        for finding in &result.findings {
             let priority = finding.severity.score();
             let effort = match priority {
-                5 => 4.0,  // Critical: 4 hours
-                4 => 3.0,  // High: 3 hours
-                3 => 2.0,  // Medium: 2 hours
-                2 => 1.0,  // Low: 1 hour
-                _ => 0.5,  // Info: 30 min
+                5 => 4.0, // Critical: 4 hours
+                4 => 3.0, // High: 3 hours
+                3 => 2.0, // Medium: 2 hours
+                2 => 1.0, // Low: 1 hour
+                _ => 0.5, // Info: 30 min
             };
 
             recommendations.push(PyFindingRecommendation {
                 finding_id: finding.id.clone(),
                 recommendation: finding.recommendation.clone().unwrap_or_else(|| {
-                    format!(
-                        "Address {} issue: {}",
-                        result.analyzer_name,
-                        finding.title
-                    )
+                    format!("Address {} issue: {}", result.analyzer_name, finding.title)
                 }),
                 priority,
                 estimated_effort_hours: effort,
@@ -1384,9 +1439,11 @@ fn get_fix_recommendations(results: Vec<PyAnalysisResult>) -> PyResult<Vec<PyFin
     }
 
     recommendations.sort_by(|a, b| {
-        b.priority
-            .cmp(&a.priority)
-            .then_with(|| b.estimated_effort_hours.partial_cmp(&a.estimated_effort_hours).unwrap())
+        b.priority.cmp(&a.priority).then_with(|| {
+            b.estimated_effort_hours
+                .partial_cmp(&a.estimated_effort_hours)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        })
     });
 
     Ok(recommendations)
@@ -1436,7 +1493,9 @@ impl PyAnalyzerPerformance {
 }
 
 #[pyfunction]
-fn get_analyzer_performance(results: Vec<PyAnalysisResult>) -> PyResult<Vec<PyAnalyzerPerformance>> {
+fn get_analyzer_performance(
+    results: Vec<PyAnalysisResult>,
+) -> PyResult<Vec<PyAnalyzerPerformance>> {
     let mut performance = Vec::new();
 
     for result in results {
@@ -1457,7 +1516,7 @@ fn get_analyzer_performance(results: Vec<PyAnalysisResult>) -> PyResult<Vec<PyAn
         });
     }
 
-    performance.sort_by(|a, b| b.total_impact_score.cmp(&a.total_impact_score));
+    performance.sort_by_key(|p| std::cmp::Reverse(p.total_impact_score));
     Ok(performance)
 }
 
@@ -1539,7 +1598,7 @@ fn prioritize_findings(results: Vec<PyAnalysisResult>) -> PyResult<Vec<PyPriorit
             prioritized.push(PyPrioritizedFinding {
                 finding_id: finding.id,
                 priority_score,
-                recommendation: finding.recommendation.unwrap_or_else(|| finding.title),
+                recommendation: finding.recommendation.unwrap_or(finding.title),
             });
         }
     }
@@ -1606,8 +1665,8 @@ impl PyResultSnapshot {
 fn create_result_snapshot(results: Vec<PyAnalysisResult>) -> PyResult<PyResultSnapshot> {
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_secs() as i64;
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0);
 
     let mut total_findings = 0usize;
     let mut critical_count = 0usize;
@@ -1646,7 +1705,7 @@ fn create_result_snapshot(results: Vec<PyAnalysisResult>) -> PyResult<PyResultSn
 
 #[pymodule]
 fn pybeamguard(_py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
-    m.add("__version__", "1.0.0")?;
+    m.add("__version__", env!("CARGO_PKG_VERSION"))?;
     m.add(
         "__doc__",
         "Apache Beam & Dataflow pipeline analysis with risk scoring and finding prioritization",
