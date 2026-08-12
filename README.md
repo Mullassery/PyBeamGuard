@@ -4,11 +4,11 @@
 
 Analyze Beam pipelines pre-deployment to identify bottlenecks, reliability risks, and cost drivers. FREE. No GCP account required. Works offline.
 
-> A static analysis platform for Apache Beam pipelines, with basic pattern
-> detection for Flink and Spark source files.
+> A static analysis platform for Apache Beam, Apache Flink, and Apache Spark
+> pipelines.
 
 [![CI](https://github.com/Mullassery/PyBeamGuard/actions/workflows/ci.yml/badge.svg)](https://github.com/Mullassery/PyBeamGuard/actions/workflows/ci.yml)
-[![Version](https://img.shields.io/badge/version-1.1.1-blue)](https://github.com/Mullassery/PyBeamGuard/releases)
+[![Version](https://img.shields.io/badge/version-1.1.2-blue)](https://github.com/Mullassery/PyBeamGuard/releases)
 [![License](https://img.shields.io/badge/license-Proprietary-blue)](LICENSE)
 [![PyPI](https://img.shields.io/badge/PyPI-pybeamguard-blue)](https://pypi.org/project/pybeamguard/)
 
@@ -108,17 +108,48 @@ Estimated Cost: $2,300/month → Optimized: $1,350/month (41% savings)
 ### Framework Support (Free)
 
 - ✅ Apache Beam — full pipeline graph extraction + all 10 analyzers
-- ⚠️ Apache Flink — **pattern detection only**: regex-based occurrence
-  counting of stateful operators (`KeyedProcessFunction`, `State`, `Timer`)
-  and windowing calls, surfaced as metadata. This is not checkpoint
-  strategy, state backend, or watermark analysis — that would require a
-  real Flink IR/analyzer pass, which does not exist yet.
-- ⚠️ Apache Spark — **pattern detection only**: regex-based occurrence
-  counting of `readStream`/`groupBy`/`window`/`trigger`/`outputMode` calls,
-  surfaced as metadata. This is not shuffle-partitioning, state-store, or
-  join-strategy analysis.
+- ✅ Apache Flink — real, first-class analyzers (`--framework flink`), same
+  regex/line-based static-analysis approach as Beam, run against a
+  structured IR extracted from PyFlink source:
+  - **FlinkCheckpointAnalyzer** — flags stateful pipelines with no
+    `enable_checkpointing(...)` at all; checkpoint intervals that are too
+    aggressive (<1s, barrier-alignment overhead) or too long (>10min, large
+    replay window on restart); `AT_LEAST_ONCE` mode (duplicate-delivery
+    risk); missing checkpoint timeout.
+  - **FlinkStateAnalyzer** — flags heap-bound state backends
+    (`HashMapStateBackend`/`MemoryStateBackend`) that risk OOM at scale,
+    RocksDB without incremental checkpoints, deprecated `FsStateBackend`,
+    and `key_by(...)` expressions on high-skew-risk domains (customer/
+    tenant/user/... — the Flink analog of Beam's hot-key detection, applied
+    to keyed state).
+  - **FlinkWatermarkAnalyzer** — flags event-time windows with no
+    `WatermarkStrategy` assigned (windows may never fire), excessive
+    bounded-out-of-orderness, and keyed streams with no windowing.
+- ✅ Apache Spark — real, first-class analyzers (`--framework spark`), same
+  approach, run against a structured IR extracted from PySpark source:
+  - **SparkShuffleAnalyzer** — flags `spark.sql.shuffle.partitions` left at
+    the 200 default alongside multiple wide transforms, set too low (OOM/
+    skew risk) or too high (per-task overhead), and jobs with several
+    shuffle-triggering transforms (`groupBy`/`join`/`distinct`/
+    `repartition`/`coalesce`/`orderBy`).
+  - **SparkJoinAnalyzer** — flags `autoBroadcastJoinThreshold` disabled
+    (`-1`) or set dangerously high (broadcast OOM risk), and join keys on
+    high-skew-risk domains (the Spark analog of Beam's hot-key detection,
+    applied to shuffle join keys).
+  - **SparkStreamingAnalyzer** — flags `writeStream` queries with no
+    `checkpointLocation` (no recovery guarantee), no explicit trigger,
+    `cache()`/`persist()` with no matching `unpersist()`, and the classic
+    Structured Streaming pitfall of a `groupBy` aggregation in `append`
+    output mode with no watermark (fails at query start in real Spark).
 - 🔜 Kafka Streams (not started)
 - 🔜 Ray Data (not started)
+
+Both are driven by the same `analyze` command:
+
+```bash
+pybeamguard analyze streaming_job.py --framework flink
+pybeamguard analyze etl.py --framework spark
+```
 
 ---
 
@@ -337,12 +368,13 @@ pytest tests/
 
 ## Release Status
 
-**Current state: working proof-of-concept for Apache Beam analysis**, with
-packaging and CI around it. Concretely, what's implemented and tested today:
+**Current state: working proof-of-concept for Apache Beam, Flink, and Spark
+analysis**, with packaging and CI around it. Concretely, what's implemented
+and tested today:
 - ✅ 10 intelligent analyzers over Apache Beam pipelines (regex/heuristic-based, not full AST analysis)
+- ✅ 3 intelligent analyzers over Apache Flink pipelines (checkpointing, state backend, watermark/windowing) and 3 over Apache Spark pipelines (shuffle partitioning, join/broadcast strategy, streaming checkpoint/trigger/output-mode) — see Framework Support above
 - ✅ Python bindings via PyO3 abi3, real `pip install`-able package
 - ✅ `--fail-on <severity>` CI gating and `--data-profile`-informed cost/hot-key estimates
-- ⚠️ Flink/Spark: pattern detection only (see Framework Support above) — not full analysis
 - ✅ Rust unit + integration tests, Python binding/CLI tests, all run in CI (see badge above)
 - ✅ <500ms analysis per pipeline (small/medium pipelines; not independently benchmarked at scale)
 
@@ -355,7 +387,6 @@ analysis path and no way to test them without external systems this project
 doesn't have access to.
 
 **Future Roadmap (aspirational, not started):**
-- Real Flink/Spark analyzers (checkpoint/state/shuffle-partitioning), not just pattern detection
 - Kafka Streams, Ray Data framework support
 - Directory/glob input to `analyze` (currently single-file only)
 - Re-introduce org governance / audit logging as real, tested features if there's demand
@@ -421,9 +452,10 @@ Build, ...). There's no bundled CI-specific plugin/action, just a
 CLI with a meaningful exit code.
 
 **Q: What about Spark, Flink, Kafka Streams?**  
-A: Spark and Flink source files get basic pattern detection today (regex
-occurrence counting of key operators, not real analysis — see Framework
-Support above). Kafka Streams and Ray Data support hasn't been started.
+A: Spark and Flink both have real, dedicated analyzer suites today —
+run with `pybeamguard analyze <file> --framework flink` or `--framework
+spark` (see Framework Support above for exactly what each analyzer checks).
+Kafka Streams and Ray Data support hasn't been started.
 
 ---
 

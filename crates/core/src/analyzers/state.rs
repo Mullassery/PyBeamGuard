@@ -2,6 +2,12 @@ use crate::analyzer::*;
 use crate::ir::*;
 use std::collections::HashMap;
 
+/// Above this measured state size, a single stateful pipeline is large
+/// enough that unbounded growth (missing TTL/cleanup) becomes an operational
+/// emergency rather than a slow-burn cost concern -- worth escalating past
+/// the flat `STATE_UNBOUNDED_GROWTH` finding below.
+const LARGE_MEASURED_STATE_SIZE_GB: f64 = 500.0;
+
 pub struct StateAnalyzer;
 
 impl Analyzer for StateAnalyzer {
@@ -19,6 +25,7 @@ impl Analyzer for StateAnalyzer {
 
     fn analyze(&self, ctx: &AnalysisContext) -> anyhow::Result<AnalysisResult> {
         let ir = &ctx.pipeline_ir;
+        let profile = ctx.data_profile.as_ref();
         let mut findings = Vec::new();
         let mut metrics = HashMap::new();
 
@@ -126,6 +133,40 @@ impl Analyzer for StateAnalyzer {
             }
         }
 
+        // A measured state size from a data profile is a stronger signal
+        // than the per-op flat heuristics above: real state that's already
+        // this large means unbounded growth (missing TTL/cleanup) is not a
+        // theoretical risk but an active operational concern.
+        if let Some(state_size_gb) = profile.and_then(|p| p.estimated_state_size_gb) {
+            metrics.insert("data_profile_state_size_gb".to_string(), state_size_gb);
+
+            if state_size_gb > LARGE_MEASURED_STATE_SIZE_GB {
+                findings.push(Finding {
+                    id: "STATE_SIZE_MEASURED_CRITICAL".to_string(),
+                    severity: RiskSeverity::Critical,
+                    finding_type: FindingType::ScalabilityRisk,
+                    title: format!(
+                        "Measured state size ({:.0}GB) is dangerously large for {} stateful operation(s)",
+                        state_size_gb, op_count
+                    ),
+                    description: format!(
+                        "The supplied data profile reports {:.0}GB of state. At this size, missing TTL/cleanup logic or an unexpectedly long allowed-lateness window doesn't just add cost -- it risks checkpoint timeouts, slow restores, and worker disk pressure.",
+                        state_size_gb
+                    ),
+                    affected_nodes: stateful_ops.iter().map(|n| n.id.clone()).collect(),
+                    recommendation: Some(
+                        "Audit every stateful operation for an explicit TTL/timer-based cleanup path, and confirm allowed lateness isn't retaining state far longer than the business logic requires. Consider partitioning state across more workers if a single key's state is the dominant contributor.".to_string()
+                    ),
+                    estimated_impact: Some(Impact {
+                        latency_multiplier: None,
+                        cost_delta_monthly: Some(state_size_gb * 0.04),
+                        affected_records_percent: None,
+                    }),
+                    confidence: 0.80,
+                });
+            }
+        }
+
         Ok(AnalysisResult {
             analyzer_name: self.name().to_string(),
             version: self.version().to_string(),
@@ -179,5 +220,68 @@ mod tests {
         };
         let result = analyzer.analyze(&ctx).unwrap();
         assert!(!result.findings.is_empty());
+    }
+
+    fn stateful_pardo_node(dofn_name: &str) -> TransformNode {
+        TransformNode {
+            id: "node_1".to_string(),
+            name: "StatefulParDo".to_string(),
+            node_type: TransformType::ParDo {
+                dofn_name: dofn_name.to_string(),
+                is_stateful: true,
+                has_side_inputs: false,
+                has_side_outputs: false,
+            },
+            inputs: vec![],
+            outputs: vec!["counted".to_string()],
+            config: serde_json::json!({}),
+            annotations: vec![],
+            line_number: None,
+        }
+    }
+
+    #[test]
+    fn test_large_measured_state_size_escalates_to_critical() {
+        let mut ir = PipelineIR::new("test".to_string());
+        ir.nodes.push(stateful_pardo_node("Aggregate"));
+
+        let ctx = AnalysisContext {
+            pipeline_ir: ir,
+            data_profile: Some(DataProfile {
+                estimated_throughput_per_sec: None,
+                average_element_size_bytes: None,
+                key_cardinality: None,
+                estimated_state_size_gb: Some(800.0),
+            }),
+        };
+        let result = StateAnalyzer.analyze(&ctx).unwrap();
+        assert!(result.findings.iter().any(
+            |f| f.id == "STATE_SIZE_MEASURED_CRITICAL" && f.severity == RiskSeverity::Critical
+        ));
+        assert_eq!(
+            result.metrics.get("data_profile_state_size_gb"),
+            Some(&800.0)
+        );
+    }
+
+    #[test]
+    fn test_small_measured_state_size_does_not_escalate() {
+        let mut ir = PipelineIR::new("test".to_string());
+        ir.nodes.push(stateful_pardo_node("Aggregate"));
+
+        let ctx = AnalysisContext {
+            pipeline_ir: ir,
+            data_profile: Some(DataProfile {
+                estimated_throughput_per_sec: None,
+                average_element_size_bytes: None,
+                key_cardinality: None,
+                estimated_state_size_gb: Some(5.0),
+            }),
+        };
+        let result = StateAnalyzer.analyze(&ctx).unwrap();
+        assert!(!result
+            .findings
+            .iter()
+            .any(|f| f.id == "STATE_SIZE_MEASURED_CRITICAL"));
     }
 }

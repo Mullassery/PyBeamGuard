@@ -12,9 +12,10 @@
 
 use pybeamguard_core::analyzers::registry::{create_analyzers, create_analyzers_by_names};
 use pybeamguard_core::{
-    analyze_pipeline, AnalysisContext, AnalysisResult as RustAnalysisResult, BeamPipelineParser,
-    DataProfile, Finding as RustFinding, Impact, JsonReporter, PipelineIR as RustPipelineIR,
-    Reporter, RiskSeverity, TextReporter, TransformNode as RustTransformNode,
+    analyze_flink_pipeline, analyze_pipeline, analyze_spark_pipeline, AnalysisContext,
+    AnalysisResult as RustAnalysisResult, BeamPipelineParser, DataProfile, Finding as RustFinding,
+    Impact, JsonReporter, PipelineIR as RustPipelineIR, Reporter, RiskSeverity, TextReporter,
+    TransformNode as RustTransformNode,
 };
 use pyo3::prelude::*;
 use std::collections::HashMap;
@@ -535,6 +536,82 @@ fn analyze_structured(
 }
 
 // ============================================================================
+// FRAMEWORK SUPPORT: analyze_flink / analyze_spark
+//
+// Real, framework-specific analyzer suites -- checkpoint strategy, state
+// backend, and watermark/windowing for Flink; shuffle partitioning, join
+// strategy, and streaming checkpoint/trigger/output-mode for Spark. Mirror
+// `analyze`/`analyze_structured`'s two shapes (raw JSON string vs.
+// structured `PyAnalysisResult` list) so callers can pick whichever fits.
+// ============================================================================
+
+#[pyfunction]
+#[pyo3(signature = (code, data_profile=None))]
+fn analyze_flink(code: String, data_profile: Option<String>) -> PyResult<String> {
+    let profile = parse_data_profile(data_profile)?;
+
+    let results = analyze_flink_pipeline(&code, profile)
+        .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))?;
+
+    serde_json::to_string(&results)
+        .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))
+}
+
+#[pyfunction]
+#[pyo3(signature = (code, data_profile=None))]
+fn analyze_flink_structured(
+    code: String,
+    data_profile: Option<String>,
+) -> PyResult<Vec<PyAnalysisResult>> {
+    let profile = parse_data_profile(data_profile)?;
+
+    let results = analyze_flink_pipeline(&code, profile)
+        .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))?;
+
+    Ok(results.iter().map(convert_analysis_result).collect())
+}
+
+#[pyfunction]
+#[pyo3(signature = (code, data_profile=None))]
+fn analyze_spark(code: String, data_profile: Option<String>) -> PyResult<String> {
+    let profile = parse_data_profile(data_profile)?;
+
+    let results = analyze_spark_pipeline(&code, profile)
+        .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))?;
+
+    serde_json::to_string(&results)
+        .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))
+}
+
+#[pyfunction]
+#[pyo3(signature = (code, data_profile=None))]
+fn analyze_spark_structured(
+    code: String,
+    data_profile: Option<String>,
+) -> PyResult<Vec<PyAnalysisResult>> {
+    let profile = parse_data_profile(data_profile)?;
+
+    let results = analyze_spark_pipeline(&code, profile)
+        .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))?;
+
+    Ok(results.iter().map(convert_analysis_result).collect())
+}
+
+fn parse_data_profile(data_profile: Option<String>) -> PyResult<Option<DataProfile>> {
+    let Some(profile_json) = data_profile else {
+        return Ok(None);
+    };
+    serde_json::from_str::<DataProfile>(&profile_json)
+        .map(Some)
+        .map_err(|e| {
+            PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
+                "Invalid data profile JSON: {}",
+                e
+            ))
+        })
+}
+
+// ============================================================================
 // ENHANCED API: parse_pipeline (NEW) - Get pipeline IR structure
 // ============================================================================
 
@@ -721,6 +798,50 @@ fn get_text_report(code: String, data_profile: Option<String>) -> PyResult<Strin
 
     let reporter = TextReporter;
     Ok(reporter.format(&results))
+}
+
+// ============================================================================
+// FRAMEWORK SUPPORT: Reporter API for Flink / Spark
+//
+// Mirrors get_json_report/get_text_report above so the pure-Python CLI
+// wrapper (src/pybeamguard/cli.py) can render `--framework flink|spark`
+// output the same way it renders Beam output, via the same reporters.
+// ============================================================================
+
+#[pyfunction]
+#[pyo3(signature = (code, data_profile=None))]
+fn get_flink_json_report(code: String, data_profile: Option<String>) -> PyResult<String> {
+    let profile = parse_data_profile(data_profile)?;
+    let results = analyze_flink_pipeline(&code, profile)
+        .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))?;
+    Ok(JsonReporter.format(&results))
+}
+
+#[pyfunction]
+#[pyo3(signature = (code, data_profile=None))]
+fn get_flink_text_report(code: String, data_profile: Option<String>) -> PyResult<String> {
+    let profile = parse_data_profile(data_profile)?;
+    let results = analyze_flink_pipeline(&code, profile)
+        .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))?;
+    Ok(TextReporter.format(&results))
+}
+
+#[pyfunction]
+#[pyo3(signature = (code, data_profile=None))]
+fn get_spark_json_report(code: String, data_profile: Option<String>) -> PyResult<String> {
+    let profile = parse_data_profile(data_profile)?;
+    let results = analyze_spark_pipeline(&code, profile)
+        .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))?;
+    Ok(JsonReporter.format(&results))
+}
+
+#[pyfunction]
+#[pyo3(signature = (code, data_profile=None))]
+fn get_spark_text_report(code: String, data_profile: Option<String>) -> PyResult<String> {
+    let profile = parse_data_profile(data_profile)?;
+    let results = analyze_spark_pipeline(&code, profile)
+        .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))?;
+    Ok(TextReporter.format(&results))
 }
 
 // ============================================================================
@@ -1744,6 +1865,12 @@ fn pybeamguard(_py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(analyze_structured, m)?)?;
     m.add_function(wrap_pyfunction!(parse_pipeline, m)?)?;
 
+    // Register Framework Support functions (Flink/Spark)
+    m.add_function(wrap_pyfunction!(analyze_flink, m)?)?;
+    m.add_function(wrap_pyfunction!(analyze_flink_structured, m)?)?;
+    m.add_function(wrap_pyfunction!(analyze_spark, m)?)?;
+    m.add_function(wrap_pyfunction!(analyze_spark_structured, m)?)?;
+
     // Register Phase 3 functions
     m.add_function(wrap_pyfunction!(get_available_analyzers, m)?)?;
     m.add_function(wrap_pyfunction!(analyze_with_analyzers, m)?)?;
@@ -1752,6 +1879,12 @@ fn pybeamguard(_py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(get_json_report, m)?)?;
     m.add_function(wrap_pyfunction!(get_text_report, m)?)?;
     m.add_function(wrap_pyfunction!(analyze_and_format, m)?)?;
+
+    // Register Framework Support reporter functions (Flink/Spark)
+    m.add_function(wrap_pyfunction!(get_flink_json_report, m)?)?;
+    m.add_function(wrap_pyfunction!(get_flink_text_report, m)?)?;
+    m.add_function(wrap_pyfunction!(get_spark_json_report, m)?)?;
+    m.add_function(wrap_pyfunction!(get_spark_text_report, m)?)?;
 
     // Register Phase 5 functions (Pipeline inspection)
     m.add_function(wrap_pyfunction!(get_pipeline_complexity_score, m)?)?;

@@ -5,11 +5,14 @@ Google Cloud Dataflow deployments to identify performance bottlenecks,
 reliability risks, and cost optimization opportunities.
 
 Features:
-- 10 intelligent analyzers (Graph, HotKey, Shuffle, Windowing, State, Cost,
-  Reliability, BestPractices, Deployment, Architecture Review)
+- 10 intelligent analyzers for Apache Beam (Graph, HotKey, Shuffle,
+  Windowing, State, Cost, Reliability, BestPractices, Deployment,
+  Architecture Review)
+- 3 intelligent analyzers for Apache Flink (checkpoint strategy, state
+  backend, watermark/windowing) and 3 for Apache Spark (shuffle
+  partitioning, join/broadcast strategy, streaming checkpoint/trigger/
+  output-mode) -- real static analysis over source, not pattern counting
 - Pre-deployment cost forecasting (heuristic estimate; see README)
-- Apache Beam pattern detection for Flink and Spark source files (regex-based
-  occurrence counting, not full checkpoint/state/shuffle analysis)
 - CI/CD-friendly: `--fail-on <severity>` gates the process exit code so any
   CI system (GitHub Actions, GitLab CI, Jenkins, ...) can fail a build on it
 - Structured Python bindings for programmatic access
@@ -19,6 +22,8 @@ Example:
     $ pybeamguard analyze pipeline.py
     $ pybeamguard analyze pipeline.py --format json
     $ pybeamguard analyze pipeline.py --fail-on critical
+    $ pybeamguard analyze streaming_job.py --framework flink
+    $ pybeamguard analyze etl.py --framework spark
 
     # Python API
     from pybeamguard import core
@@ -27,6 +32,10 @@ Example:
         print(f"Analyzer: {result.get_analyzer_name()}")
         for finding in result.critical_findings():
             print(f"  {finding.get_title()}")
+
+    # Flink / Spark
+    flink_results = core.analyze_flink_structured(flink_pipeline_code)
+    spark_results = core.analyze_spark_structured(spark_pipeline_code)
 
 Visit: https://github.com/Mullassery/pybeamguard
 """
@@ -68,11 +77,19 @@ try:
         PyResultSnapshot as ResultSnapshot,
         analyze,
         analyze_structured,
+        analyze_flink,
+        analyze_flink_structured,
+        analyze_spark,
+        analyze_spark_structured,
         parse_pipeline,
         get_available_analyzers,
         analyze_with_analyzers,
         get_json_report,
         get_text_report,
+        get_flink_json_report,
+        get_flink_text_report,
+        get_spark_json_report,
+        get_spark_text_report,
         analyze_and_format,
         get_pipeline_complexity_score,
         get_pipeline_summary,
@@ -116,11 +133,19 @@ except ImportError as e:
     ResultSnapshot = None
     analyze = None
     analyze_structured = None
+    analyze_flink = None
+    analyze_flink_structured = None
+    analyze_spark = None
+    analyze_spark_structured = None
     parse_pipeline = None
     get_available_analyzers = None
     analyze_with_analyzers = None
     get_json_report = None
     get_text_report = None
+    get_flink_json_report = None
+    get_flink_text_report = None
+    get_spark_json_report = None
+    get_spark_text_report = None
     analyze_and_format = None
     get_pipeline_complexity_score = None
     get_pipeline_summary = None
@@ -163,11 +188,19 @@ __all__ = [
     "ResultSnapshot",
     "analyze",
     "analyze_structured",
+    "analyze_flink",
+    "analyze_flink_structured",
+    "analyze_spark",
+    "analyze_spark_structured",
     "parse_pipeline",
     "get_available_analyzers",
     "analyze_with_analyzers",
     "get_json_report",
     "get_text_report",
+    "get_flink_json_report",
+    "get_flink_text_report",
+    "get_spark_json_report",
+    "get_spark_text_report",
     "analyze_and_format",
     "get_pipeline_complexity_score",
     "get_pipeline_summary",

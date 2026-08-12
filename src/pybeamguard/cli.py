@@ -53,7 +53,13 @@ def _build_parser() -> argparse.ArgumentParser:
     analyze_parser = subparsers.add_parser(
         "analyze", help="Analyze a Beam pipeline Python file."
     )
-    analyze_parser.add_argument("pipeline", help="Path to a Beam pipeline .py file.")
+    analyze_parser.add_argument("pipeline", help="Path to a pipeline source .py file.")
+    analyze_parser.add_argument(
+        "--framework",
+        choices=["beam", "flink", "spark"],
+        default="beam",
+        help="Pipeline framework: beam (default), flink, or spark.",
+    )
     analyze_parser.add_argument(
         "--format",
         choices=["text", "json"],
@@ -117,11 +123,25 @@ def _cmd_analyze(args: argparse.Namespace) -> int:
             print(f"Error parsing data profile JSON: {e}", file=sys.stderr)
             return 1
 
+    json_report, text_report, structured = {
+        "beam": (native.get_json_report, native.get_text_report, native.analyze_structured),
+        "flink": (
+            native.get_flink_json_report,
+            native.get_flink_text_report,
+            native.analyze_flink_structured,
+        ),
+        "spark": (
+            native.get_spark_json_report,
+            native.get_spark_text_report,
+            native.analyze_spark_structured,
+        ),
+    }[args.framework]
+
     try:
         if args.format == "json":
-            output = native.get_json_report(code, data_profile_json)
+            output = json_report(code, data_profile_json)
         else:
-            output = native.get_text_report(code, data_profile_json)
+            output = text_report(code, data_profile_json)
     except Exception as e:  # native bindings raise plain Python exceptions
         print(f"Analysis failed: {e}", file=sys.stderr)
         return 1
@@ -130,7 +150,7 @@ def _cmd_analyze(args: argparse.Namespace) -> int:
 
     if args.fail_on:
         try:
-            results = native.analyze_structured(code, data_profile_json)
+            results = structured(code, data_profile_json)
         except Exception as e:
             print(f"Analysis failed: {e}", file=sys.stderr)
             return 1

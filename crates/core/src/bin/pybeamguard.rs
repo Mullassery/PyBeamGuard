@@ -1,6 +1,6 @@
 use pybeamguard_core::{
-    analyze_pipeline, reporting::JsonReporter, reporting::Reporter, reporting::TextReporter,
-    DataProfile, RiskSeverity,
+    analyze_flink_pipeline, analyze_pipeline, analyze_spark_pipeline, reporting::JsonReporter,
+    reporting::Reporter, reporting::TextReporter, AnalysisResult, DataProfile, RiskSeverity,
 };
 use std::fs;
 use std::io::Read;
@@ -47,7 +47,7 @@ fn parse_severity(s: &str) -> Option<RiskSeverity> {
 fn cmd_analyze(args: &[&str]) {
     if args.is_empty() {
         eprintln!(
-            "Usage: pybeamguard analyze <pipeline.py> [--data-profile <profile.json>] [--format json|text] [--fail-on <severity>]"
+            "Usage: pybeamguard analyze <pipeline.py> [--framework beam|flink|spark] [--data-profile <profile.json>] [--format json|text] [--fail-on <severity>]"
         );
         std::process::exit(1);
     }
@@ -56,6 +56,7 @@ fn cmd_analyze(args: &[&str]) {
     let mut format = "text";
     let mut data_profile_file: Option<&str> = None;
     let mut fail_on: Option<RiskSeverity> = None;
+    let mut framework = "beam";
 
     // Parse options
     let mut i = 1;
@@ -67,6 +68,22 @@ fn cmd_analyze(args: &[&str]) {
                     i += 2;
                 } else {
                     eprintln!("--format requires a value");
+                    std::process::exit(1);
+                }
+            }
+            "--framework" => {
+                if i + 1 < args.len() {
+                    framework = args[i + 1];
+                    if !matches!(framework, "beam" | "flink" | "spark") {
+                        eprintln!(
+                            "Invalid --framework value '{}'. Expected one of: beam, flink, spark",
+                            framework
+                        );
+                        std::process::exit(1);
+                    }
+                    i += 2;
+                } else {
+                    eprintln!("--framework requires a value (beam|flink|spark)");
                     std::process::exit(1);
                 }
             }
@@ -136,7 +153,13 @@ fn cmd_analyze(args: &[&str]) {
     };
 
     // Run analysis
-    match analyze_pipeline(&pipeline_code, data_profile) {
+    let analysis: anyhow::Result<Vec<AnalysisResult>> = match framework {
+        "flink" => analyze_flink_pipeline(&pipeline_code, data_profile),
+        "spark" => analyze_spark_pipeline(&pipeline_code, data_profile),
+        _ => analyze_pipeline(&pipeline_code, data_profile),
+    };
+
+    match analysis {
         Ok(results) => {
             let output = match format {
                 "json" => JsonReporter.format(&results),
@@ -190,15 +213,22 @@ COMMANDS:
     help                Show this help message
 
 OPTIONS for 'analyze':
-    <pipeline.py>           Path to Beam pipeline Python file (required)
+    <pipeline.py>           Path to pipeline source file (required)
+    --framework FRAMEWORK   Pipeline framework: beam (default), flink, or spark
     --data-profile FILE     Path to data profile JSON file (optional)
     --format FORMAT         Output format: text (default) or json
     --fail-on SEVERITY      Exit non-zero if any finding is >= this severity
                              (info|low|medium|high|critical)
 
 EXAMPLES:
-    # Analyze a pipeline
+    # Analyze a Beam pipeline
     pybeamguard analyze pipeline.py
+
+    # Analyze a PyFlink pipeline (checkpointing, state backend, watermarks)
+    pybeamguard analyze streaming_job.py --framework flink
+
+    # Analyze a PySpark pipeline (shuffle partitions, joins, streaming)
+    pybeamguard analyze etl.py --framework spark
 
     # With data profile
     pybeamguard analyze pipeline.py --data-profile profile.json

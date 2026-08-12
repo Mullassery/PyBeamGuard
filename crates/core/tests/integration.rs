@@ -9,7 +9,9 @@
 //! guard against panics in a CLI that is meant to run unattended in CI on
 //! third-party/PR-submitted pipeline code.
 
-use pybeamguard_core::{analyze_pipeline, DataProfile};
+use pybeamguard_core::{
+    analyze_flink_pipeline, analyze_pipeline, analyze_spark_pipeline, DataProfile,
+};
 
 const REALISTIC_STREAMING_PIPELINE: &str = r#"
 import apache_beam as beam
@@ -185,4 +187,125 @@ fn analyze_pipeline_extremely_long_single_line_does_not_panic() {
     // No transforms detected beyond the import, but this must not panic;
     // whether it errors (no pipeline) or succeeds with zero nodes is fine.
     let _ = result;
+}
+
+// ---------------------------------------------------------------------------
+// Flink: end-to-end through analyze_flink_pipeline
+// ---------------------------------------------------------------------------
+
+const REALISTIC_FLINK_PIPELINE_WITH_RISKS: &str = r#"
+from pyflink.datastream import StreamExecutionEnvironment
+from pyflink.datastream.state_backend import HashMapStateBackend
+
+env = StreamExecutionEnvironment.get_execution_environment()
+env.enable_checkpointing(200)
+env.set_state_backend(HashMapStateBackend())
+
+ds = env.from_source(source, watermark, "source")
+keyed = ds.key_by(lambda x: x.customer_id)
+windowed = keyed.window(TumblingEventTimeWindows.of(Time.seconds(60)))
+result = windowed.process(MyProcessWindowFunction())
+result.add_sink(SinkFn())
+"#;
+
+#[test]
+fn analyze_flink_pipeline_realistic_source_end_to_end() {
+    let results = analyze_flink_pipeline(REALISTIC_FLINK_PIPELINE_WITH_RISKS, None)
+        .expect("realistic Flink pipeline should parse and analyze without error");
+
+    assert_eq!(results.len(), 3, "expected all 3 Flink analyzers to run");
+    let names: Vec<&str> = results.iter().map(|r| r.analyzer_name.as_str()).collect();
+    for expected in [
+        "FlinkCheckpointAnalyzer",
+        "FlinkStateAnalyzer",
+        "FlinkWatermarkAnalyzer",
+    ] {
+        assert!(
+            names.contains(&expected),
+            "missing Flink analyzer result: {expected}"
+        );
+    }
+
+    let all_findings: Vec<&str> = results
+        .iter()
+        .flat_map(|r| r.findings.iter().map(|f| f.id.as_str()))
+        .collect();
+
+    // Aggressive 200ms checkpoint interval.
+    assert!(all_findings.contains(&"FLINK_CHECKPOINT_INTERVAL_TOO_AGGRESSIVE"));
+    // HashMapStateBackend is heap-bound.
+    assert!(all_findings.contains(&"FLINK_STATE_BACKEND_HEAP_RISK"));
+    // key_by(customer_id) matches the high-risk key domain heuristic.
+    assert!(all_findings.contains(&"FLINK_KEYED_STATE_HOT_KEY_RISK"));
+    // Event-time window with no watermark strategy assigned.
+    assert!(all_findings.contains(&"FLINK_WATERMARK_MISSING"));
+}
+
+#[test]
+fn analyze_flink_pipeline_rejects_non_flink_source() {
+    let result = analyze_flink_pipeline("print('not flink')", None);
+    assert!(result.is_err());
+}
+
+// ---------------------------------------------------------------------------
+// Spark: end-to-end through analyze_spark_pipeline
+// ---------------------------------------------------------------------------
+
+const REALISTIC_SPARK_PIPELINE_WITH_RISKS: &str = r#"
+from pyspark.sql import SparkSession
+
+spark = SparkSession.builder.appName("orders").getOrCreate()
+spark.conf.set("spark.sql.autoBroadcastJoinThreshold", -1)
+
+orders = spark.readStream.format("kafka").option("subscribe", "orders").load()
+customers = spark.read.format("jdbc").option("dbtable", "customers").load()
+
+joined = orders.join(customers, on="customer_id")
+grouped = joined.groupBy("customer_id").count()
+
+query = (
+    grouped.writeStream
+    .format("console")
+    .outputMode("append")
+    .start()
+)
+"#;
+
+#[test]
+fn analyze_spark_pipeline_realistic_source_end_to_end() {
+    let results = analyze_spark_pipeline(REALISTIC_SPARK_PIPELINE_WITH_RISKS, None)
+        .expect("realistic Spark pipeline should parse and analyze without error");
+
+    assert_eq!(results.len(), 3, "expected all 3 Spark analyzers to run");
+    let names: Vec<&str> = results.iter().map(|r| r.analyzer_name.as_str()).collect();
+    for expected in [
+        "SparkShuffleAnalyzer",
+        "SparkJoinAnalyzer",
+        "SparkStreamingAnalyzer",
+    ] {
+        assert!(
+            names.contains(&expected),
+            "missing Spark analyzer result: {expected}"
+        );
+    }
+
+    let all_findings: Vec<&str> = results
+        .iter()
+        .flat_map(|r| r.findings.iter().map(|f| f.id.as_str()))
+        .collect();
+
+    // autoBroadcastJoinThreshold disabled (-1).
+    assert!(all_findings.contains(&"SPARK_BROADCAST_THRESHOLD_DISABLED"));
+    // join(on="customer_id") matches the high-risk key domain heuristic.
+    assert!(all_findings.contains(&"SPARK_JOIN_HIGH_RISK_KEY"));
+    // writeStream with no checkpointLocation option.
+    assert!(all_findings.contains(&"SPARK_STREAMING_NO_CHECKPOINT_LOCATION"));
+    // groupBy aggregation + append mode + no watermark: fails at runtime in real Spark.
+    assert!(all_findings.contains(&"SPARK_AGGREGATION_APPEND_MODE_INCOMPATIBLE"));
+}
+
+#[test]
+fn analyze_spark_pipeline_rejects_non_spark_source() {
+    let result = analyze_spark_pipeline("print('not spark')", None);
+    assert!(result.is_err());
 }

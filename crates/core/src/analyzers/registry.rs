@@ -1,5 +1,6 @@
 use super::{
-    best_practices, cost, deployment, graph, hotkey, reliability, shuffle, state, synthesis,
+    best_practices, cost, deployment, flink_checkpoint, flink_state, flink_watermark, graph,
+    hotkey, reliability, shuffle, spark_join, spark_shuffle, spark_streaming, state, synthesis,
     windowing,
 };
 use crate::analyzer::Analyzer;
@@ -29,4 +30,26 @@ pub fn create_analyzers_by_names(names: &[&str]) -> Vec<Box<dyn Analyzer>> {
     all.into_iter()
         .filter(|a| names.contains(&a.name()))
         .collect()
+}
+
+/// Analyzers for Apache Flink pipelines, run against the `PipelineIR`
+/// produced by `FlinkFrameworkParser`. First-class, checkpoint/state/
+/// watermark-aware analyzers -- not the pattern-occurrence counting this
+/// framework used to be limited to.
+pub fn create_flink_analyzers() -> Vec<Box<dyn Analyzer>> {
+    vec![
+        Box::new(flink_checkpoint::FlinkCheckpointAnalyzer),
+        Box::new(flink_state::FlinkStateAnalyzer),
+        Box::new(flink_watermark::FlinkWatermarkAnalyzer),
+    ]
+}
+
+/// Analyzers for Apache Spark (Structured Streaming / DataFrame) pipelines,
+/// run against the `PipelineIR` produced by `SparkFrameworkParser`.
+pub fn create_spark_analyzers() -> Vec<Box<dyn Analyzer>> {
+    vec![
+        Box::new(spark_shuffle::SparkShuffleAnalyzer),
+        Box::new(spark_join::SparkJoinAnalyzer),
+        Box::new(spark_streaming::SparkStreamingAnalyzer),
+    ]
 }
