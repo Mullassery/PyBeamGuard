@@ -2,7 +2,7 @@
 
 **Catch Apache Beam failures before deployment. Forecast costs. Fix hot keys.**
 
-Analyze Beam pipelines pre-deployment to identify bottlenecks, reliability risks, and cost drivers. FREE. No GCP account required. Works offline.
+Analyze Beam pipelines pre-deployment to identify bottlenecks, reliability risks, and cost drivers. FREE. No cloud account required. Works offline.
 
 > A static analysis platform for Apache Beam, Apache Flink, and Apache Spark
 > pipelines.
@@ -18,16 +18,16 @@ Analyze Beam pipelines pre-deployment to identify bottlenecks, reliability risks
 
 ### Why PyBeamGuard?
 
-| Feature | PyBeamGuard | Cloud Profiler | Dataflow UI |
+| Feature | PyBeamGuard | Vendor Profiler | Managed Runner Console |
 |---------|-------------|---|---|
-| **Pre-deployment analysis** | ✅ | ❌ | ❌ |
-| **Cost forecasting** | ⚠️ Heuristic estimate (e.g. $48-$2.5K/mo range) | ❌ | ⚠️ Post-deploy |
-| **Hot key detection** | ✅ | ❌ | ❌ |
-| **Shuffle analysis** | ✅ | ❌ | ⚠️ Post-deploy |
-| **Windowing validation** | ✅ | ❌ | ❌ |
-| **Cost** | 🎉 FREE | Included in GCP | Included in GCP |
-| **Setup required** | None | GCP account | GCP account |
-| **Offline capable** | ✅ | ❌ | ❌ |
+| **Pre-deployment analysis** | Yes | No | No |
+| **Cost forecasting** | Heuristic estimate (e.g. $48-$2.5K/mo range) | No | Post-deploy only |
+| **Hot key detection** | Yes | No | No |
+| **Shuffle analysis** | Yes | No | Post-deploy only |
+| **Windowing validation** | Yes | No | No |
+| **Cost** | FREE | Included with cloud subscription | Included with cloud subscription |
+| **Setup required** | None | Cloud account | Cloud account |
+| **Offline capable** | Yes | No | No |
 
 **Bottom line:** Pre-deployment analysis you control, costs you forecast before running, no vendor lock-in.
 
@@ -71,14 +71,14 @@ pybeamguard analyze pipeline.py --data-profile profile.json
 Overall Risk Score: 78/100
 Total Findings: 5
 
-🔴 CRITICAL ISSUES
+CRITICAL ISSUES
 • Hot key probability detected on customer_id aggregation
 
-🟠 HIGH PRIORITY ISSUES
+HIGH PRIORITY ISSUES
 • Large shuffle stage in join operation
 • Missing dead-letter queue on parse failures
 
-🟡 MEDIUM PRIORITY ISSUES
+MEDIUM PRIORITY ISSUES
 • Unbounded state growth risk
 
 Estimated Cost: $2,300/month → Optimized: $1,350/month (41% savings)
@@ -94,21 +94,21 @@ Estimated Cost: $2,300/month → Optimized: $1,350/month (41% savings)
 
 | Analyzer | Purpose | Version |
 |----------|---------|---------|
-| **Graph Intelligence** | Extract pipeline topology, detect cycles | ✅ v0.1 |
-| **Hot Key Detection** | Identify key skew & worker imbalance | ✅ v0.1 |
-| **Shuffle Analysis** | Quantify expensive shuffle operations | ✅ v0.1 |
-| **Windowing Validation** | Ensure streaming correctness | ✅ v0.1 |
-| **State Auditor** | Prevent state-related failures | ✅ v0.1 |
-| **Cost Intelligence** | Forecast Dataflow spend | ✅ v0.1 |
-| **Reliability Analysis** | Detect operational weaknesses | ✅ v0.1 |
-| **Best Practices Engine** | Rule-based Beam optimization checks | ✅ v0.1 |
-| **Deployment Auditor** | Worker sizing & config validation | ✅ v0.1 |
-| **Architecture Review** | Executive summary & synthesis | ✅ v0.1 |
+| **Graph Intelligence** | Extract pipeline topology, detect cycles | v0.1 |
+| **Hot Key Detection** | Identify key skew & worker imbalance | v0.1 |
+| **Shuffle Analysis** | Quantify expensive shuffle operations | v0.1 |
+| **Windowing Validation** | Ensure streaming correctness | v0.1 |
+| **State Auditor** | Prevent state-related failures | v0.1 |
+| **Cost Intelligence** | Forecast managed-runner spend | v0.1 |
+| **Reliability Analysis** | Detect operational weaknesses | v0.1 |
+| **Best Practices Engine** | Rule-based Beam optimization checks | v0.1 |
+| **Deployment Auditor** | Worker sizing & config validation | v0.1 |
+| **Architecture Review** | Executive summary & synthesis | v0.1 |
 
 ### Framework Support (Free)
 
-- ✅ Apache Beam — full pipeline graph extraction + all 10 analyzers
-- ✅ Apache Flink — real, first-class analyzers (`--framework flink`), same
+- Apache Beam — full pipeline graph extraction + all 10 analyzers
+- Apache Flink — real, first-class analyzers (`--framework flink`), same
   regex/line-based static-analysis approach as Beam, run against a
   structured IR extracted from PyFlink source:
   - **FlinkCheckpointAnalyzer** — flags stateful pipelines with no
@@ -125,7 +125,7 @@ Estimated Cost: $2,300/month → Optimized: $1,350/month (41% savings)
   - **FlinkWatermarkAnalyzer** — flags event-time windows with no
     `WatermarkStrategy` assigned (windows may never fire), excessive
     bounded-out-of-orderness, and keyed streams with no windowing.
-- ✅ Apache Spark — real, first-class analyzers (`--framework spark`), same
+- Apache Spark — real, first-class analyzers (`--framework spark`), same
   approach, run against a structured IR extracted from PySpark source:
   - **SparkShuffleAnalyzer** — flags `spark.sql.shuffle.partitions` left at
     the 200 default alongside multiple wide transforms, set too low (OOM/
@@ -141,8 +141,8 @@ Estimated Cost: $2,300/month → Optimized: $1,350/month (41% savings)
     `cache()`/`persist()` with no matching `unpersist()`, and the classic
     Structured Streaming pitfall of a `groupBy` aggregation in `append`
     output mode with no watermark (fails at query start in real Spark).
-- 🔜 Kafka Streams (not started)
-- 🔜 Ray Data (not started)
+- Kafka Streams (not started)
+- Ray Data (not started)
 
 Both are driven by the same `analyze` command:
 
@@ -155,18 +155,18 @@ pybeamguard analyze etl.py --framework spark
 
 ## Use Cases
 
-### 👨‍💻 For Data Engineers
+### For Data Engineers
 
 Pre-deployment validation: "Will this scale? What will it cost?"
 
 ```bash
 pybeamguard analyze my_pipeline.py
-# ✓ Identifies 3 hot key risks
-# ✓ Estimates $850/month cost
-# ✓ Warns of unbounded state growth
+# Identifies 3 hot key risks
+# Estimates $850/month cost
+# Warns of unbounded state growth
 ```
 
-### 🏢 For Platform Teams
+### For Platform Teams
 
 CI/CD enforcement: fail the build if any finding is critical. `analyze`
 takes a single pipeline file (there's no built-in directory/glob support
@@ -180,7 +180,7 @@ yet), so scanning a directory of pipelines means looping over the files:
     done
 ```
 
-### 💰 For FinOps Teams
+### For FinOps Teams
 
 Cost attribution: "Why is this pipeline $2,500/month?"
 
@@ -273,17 +273,17 @@ with beam.Pipeline() as p:
 ```bash
 $ pybeamguard analyze pipeline.py
 
-🟠 HIGH PRIORITY
+HIGH PRIORITY
 • High hot-key probability on customer_id
   Impact: 3-5x latency increase
   Mitigation: Apply key sharding strategy
 
-📊 Cost Estimate
+Cost Estimate
   Compute: $18/month
   Shuffle: $30/month
   Total: $48/month
 
-✅ Recommendation: Implement key sharding before production
+Recommendation: Implement key sharding before production
 ```
 
 ### Example 2: With Data Profile
@@ -317,12 +317,14 @@ $ pybeamguard analyze pipeline.py --data-profile profile.json --format json
 
 ## Performance
 
+No committed benchmark script or results file backs a specific latency/memory
+number, so none is stated here as fact — see the Release Status and FAQ
+sections below for the honest version ("not independently benchmarked at
+scale"). What's verifiable today:
+
 | Metric | Value |
 |--------|-------|
-| **Analysis Time** | <500ms (100+ node pipeline) |
-| **Memory Usage** | <50MB |
-| **Binary Size** | 15MB (release) |
-| **Tests** | 29 Rust unit tests + 7 integration tests + Python binding/CLI tests (see CI badge) |
+| **Tests** | ~73 Rust unit tests + 11 integration tests + 18 Python binding/CLI tests (see CI badge for the exact, current count) |
 
 ---
 
@@ -371,12 +373,12 @@ pytest tests/
 **Current state: working proof-of-concept for Apache Beam, Flink, and Spark
 analysis**, with packaging and CI around it. Concretely, what's implemented
 and tested today:
-- ✅ 10 intelligent analyzers over Apache Beam pipelines (regex/heuristic-based, not full AST analysis)
-- ✅ 3 intelligent analyzers over Apache Flink pipelines (checkpointing, state backend, watermark/windowing) and 3 over Apache Spark pipelines (shuffle partitioning, join/broadcast strategy, streaming checkpoint/trigger/output-mode) — see Framework Support above
-- ✅ Python bindings via PyO3 abi3, real `pip install`-able package
-- ✅ `--fail-on <severity>` CI gating and `--data-profile`-informed cost/hot-key estimates
-- ✅ Rust unit + integration tests, Python binding/CLI tests, all run in CI (see badge above)
-- ✅ <500ms analysis per pipeline (small/medium pipelines; not independently benchmarked at scale)
+- 10 intelligent analyzers over Apache Beam pipelines (regex/heuristic-based, not full AST analysis)
+- 3 intelligent analyzers over Apache Flink pipelines (checkpointing, state backend, watermark/windowing) and 3 over Apache Spark pipelines (shuffle partitioning, join/broadcast strategy, streaming checkpoint/trigger/output-mode) — see Framework Support above
+- Python bindings via PyO3 abi3, real `pip install`-able package
+- `--fail-on <severity>` CI gating and `--data-profile`-informed cost/hot-key estimates
+- Rust unit + integration tests, Python binding/CLI tests, all run in CI (see badge above)
+- <500ms analysis per pipeline (small/medium pipelines; not independently benchmarked at scale)
 
 **Explicitly not implemented** (removed from this codebase to stop
 overclaiming rather than left as unused/untested scaffolding): organization
@@ -393,6 +395,25 @@ doesn't have access to.
 
 ---
 
+## Known Issues
+
+- No committed benchmark script or results file backs a latency/memory/binary-size
+  number, so the Performance section above no longer states one as fact — a
+  previous version of this README claimed `<500ms` / `<50MB` / `15MB` with
+  nothing checked in to reproduce those figures.
+- The Rust/Python test counts previously stated in this README (`29 Rust unit
+  tests + 7 integration tests`) were stale; the current source has roughly 73
+  `#[test]`-annotated Rust unit tests, 11 Rust integration tests, and 18
+  Python tests (counted via `grep`, not a full `cargo test`/`pytest` run — see
+  the CI badge for the authoritative, current count).
+- No open GitHub issues and no `TODO`/`FIXME`/`XXX` markers found in `crates/`
+  or `src/` as of this pass.
+- `analyze` only accepts a single pipeline file; directory/glob scanning
+  requires the loop shown in the Platform Teams example above (tracked in
+  Future Roadmap).
+
+---
+
 ## License
 
 **Proprietary Software** — FREE forever, no licensing tiers, no paywalls.
@@ -400,11 +421,11 @@ doesn't have access to.
 See [LICENSE](LICENSE) file for complete terms. All features available to all users.
 
 **Use Cases:**
-- ✅ Commercial use
-- ✅ Internal tools
-- ✅ Research
-- ✅ Education
-- ✅ Open source projects
+- Commercial use
+- Internal tools
+- Research
+- Education
+- Open source projects
 
 ---
 
@@ -441,7 +462,7 @@ partially-verified pricing assumptions (see `CostAnalyzer`'s doc comments
 in `crates/core/src/analyzers/cost.rs`). Supplying `--data-profile` replaces
 some flat per-operation guesses with your real throughput/state figures,
 which narrows the estimate, but doesn't make it a guarantee. Always confirm
-with the GCP Pricing Calculator or a real test run before committing to a
+with your cloud provider's pricing calculator or a real test run before committing to a
 budget.
 
 **Q: Can I use this in CI/CD?**  
@@ -463,40 +484,40 @@ Kafka Streams and Ray Data support hasn't been started.
 
 ### Analysis Capabilities
 
-| Capability | PyBeamGuard | Beam Native Tools | GCP Dataflow | Monitoring Tools |
+| Capability | PyBeamGuard | Beam Native Tools | Managed Runner Console | Monitoring Tools |
 |---|---|---|---|---|
-| Pipeline graph extraction | ✅ | ❌ | ❌ | ❌ |
-| Complexity scoring | ✅ | ❌ | ❌ | ❌ |
-| Hot key detection | ✅ Heuristic (keyword pattern + optional measured cardinality) | ❌ (disabled 2022) | ⚠️ Disabled for streaming | ❌ |
-| Shuffle quantification | ✅ Per-stage (rule-based) | ❌ | ⚠️ Aggregate only | ⚠️ Post-deploy only |
-| State growth prediction | ✅ Heuristic (flags stateful ops) | ❌ | ❌ | ❌ |
-| Cost forecasting | ⚠️ Pre-deploy, rough heuristic | ❌ | ⚠️ Post-deploy estimate | ❌ |
-| Best practices engine | ✅ Rule-based checks | ❌ | ❌ | ❌ |
-| Deployment audit | ✅ | ❌ | ❌ | ❌ |
-| Architecture review | ✅ Rule-based weighted scoring (not ML) | ❌ | ❌ | ⚠️ Manual only |
+| Pipeline graph extraction | Yes | No | No | No |
+| Complexity scoring | Yes | No | No | No |
+| Hot key detection | Yes Heuristic (keyword pattern + optional measured cardinality) | No (disabled 2022) | Partial Disabled for streaming | No |
+| Shuffle quantification | Yes Per-stage (rule-based) | No | Partial Aggregate only | Partial Post-deploy only |
+| State growth prediction | Yes Heuristic (flags stateful ops) | No | No | No |
+| Cost forecasting | Partial Pre-deploy, rough heuristic | No | Partial Post-deploy estimate | No |
+| Best practices engine | Yes Rule-based checks | No | No | No |
+| Deployment audit | Yes | No | No | No |
+| Architecture review | Yes Rule-based weighted scoring (not ML) | No | No | Partial Manual only |
 
 ### Deployment & Integration
 
-| Aspect | PyBeamGuard | Cloud Profiler | Dataflow UI |
+| Aspect | PyBeamGuard | Vendor Profiler | Managed Runner Console |
 |---|---|---|---|
-| Installation | pip install / wheel | Built-in (GCP) | Built-in (GCP) |
+| Installation | pip install / wheel | Built-in (cloud vendor) | Built-in (cloud vendor) |
 | Setup time | <1 minute | Account required | Account required |
-| Offline support | ✅ Full | ❌ No | ❌ No |
-| CI/CD gating | ✅ `--fail-on <severity>` exit code (works with any CI system) | ❌ No | ❌ No |
-| Python version | 3.10+ (via PyO3) | Any (GCP) | Any (GCP) |
-| Platform support | macOS, Linux, Windows | GCP only | GCP only |
+| Offline support | Yes Full | No No | No No |
+| CI/CD gating | Yes `--fail-on <severity>` exit code (works with any CI system) | No No | No No |
+| Python version | 3.10+ (via PyO3) | Any (cloud vendor) | Any (cloud vendor) |
+| Platform support | macOS, Linux, Windows | Cloud vendor only | Cloud vendor only |
 
 ### Cost
 
 | Feature | PyBeamGuard | Competitors |
 |---|---|---|
-| **Tool cost** | 🎉 FREE | Dataflow UI: Free (but runs expensive test jobs) |
-| **Cost forecasting** | ⚠️ Rough, pre-deploy heuristic (see caveat below) | ❌ Requires running pipelines |
-| **Test job cost** | ✅ Save money by not needing a real run for a first pass | ❌ Must run to estimate cost |
+| **Tool cost** | FREE | Managed runner console: free (but runs expensive test jobs) |
+| **Cost forecasting** | Partial Rough, pre-deploy heuristic (see caveat below) | No Requires running pipelines |
+| **Test job cost** | Yes Save money by not needing a real run for a first pass | No Must run to estimate cost |
 
 ### Time to Insight
 
-| Task | PyBeamGuard | Cloud Profiler | Dataflow UI |
+| Task | PyBeamGuard | Vendor Profiler | Managed Runner Console |
 |---|---|---|---|
 | Analyze pipeline | <1 sec | N/A (need to run) | N/A (need to run) |
 | Detect hot keys | <1 sec | 30+ min (with run) | 30+ min (with run) |
@@ -509,7 +530,7 @@ Kafka Streams and Ray Data support hasn't been started.
 
 PyBeamGuard fills a critical gap:
 
-**The Problem**: Google disabled hot key detection for streaming Dataflow pipelines in March 2022. No other tool provides pre-deployment Beam analysis. Teams are left with:
+**The Problem**: The major managed Beam runner disabled hot key detection for streaming pipelines in March 2022. No other tool provides pre-deployment Beam analysis. Teams are left with:
 1. Manual review (slow, inconsistent)
 2. Running expensive test jobs (costly, time-consuming)
 3. Production incidents (expensive, damaging)
@@ -518,4 +539,4 @@ PyBeamGuard fills a critical gap:
 
 ---
 
-**Made with ❤️ for data engineers everywhere.**
+**Built for data engineers everywhere.**
