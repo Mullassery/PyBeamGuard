@@ -347,10 +347,16 @@ not a pure-Python implementation.
 Contributions welcome!
 
 ```bash
-# Build the Rust workspace
-cargo build --workspace --release
+# Build the Rust core + CLI binary
+cargo build --release --bin pybeamguard
+# Note: plain `cargo build --workspace` (building the PyO3 bindings crate
+# without maturin) fails to link on macOS and is currently red in CI --
+# see Known Issues below. Use `maturin develop`/`maturin build` for the
+# Python bindings instead (below), which works and is what the real
+# PyPI release uses.
 
-# Run the Rust test suite (unit + integration)
+# Run the Rust test suite (unit + integration) -- unaffected by the
+# `cargo build --workspace` linking issue above
 cargo test --workspace
 
 # Lint
@@ -377,7 +383,10 @@ and tested today:
 - 3 intelligent analyzers over Apache Flink pipelines (checkpointing, state backend, watermark/windowing) and 3 over Apache Spark pipelines (shuffle partitioning, join/broadcast strategy, streaming checkpoint/trigger/output-mode) — see Framework Support above
 - Python bindings via PyO3 abi3, real `pip install`-able package
 - `--fail-on <severity>` CI gating and `--data-profile`-informed cost/hot-key estimates
-- Rust unit + integration tests, Python binding/CLI tests, all run in CI (see badge above)
+- Rust unit + integration tests, Python binding/CLI tests -- verified by
+  running them directly during this audit (`cargo test --workspace`: 73
+  unit + 11 integration tests passing; `pytest`-style 18 Python tests);
+  CI itself is currently red, see Known Issues below for why
 - <500ms analysis per pipeline (small/medium pipelines; not independently benchmarked at scale)
 
 **Explicitly not implemented** (removed from this codebase to stop
@@ -397,6 +406,19 @@ doesn't have access to.
 
 ## Known Issues
 
+- **CI is currently red** (all 5 of the last 5 runs, since 2026-08-07, per
+  `gh run list`). Root cause: the `ci.yml` workflow's `cargo build
+  --workspace --verbose` step tries to link the PyO3 `extension-module`
+  bindings crate (`bindings/python`) as a plain cdylib outside of
+  `maturin` -- `ld: symbol(s) not found for architecture arm64` on the
+  macOS runner (reproduced locally on this pass). Because that step runs
+  before `Run tests`, the test step never executes in CI. This is a CI
+  workflow bug, not a code or test regression: run directly (bypassing
+  that broken step), `cargo test --workspace` passes 73 unit + 11
+  integration tests and `pytest tests/` passes 18 tests, all verified
+  during this audit. The PyPI package itself is unaffected -- it's built
+  via `maturin`, not this workflow, and `pip install pybeamguard` +
+  `pybeamguard analyze` were confirmed working end-to-end.
 - No committed benchmark script or results file backs a latency/memory/binary-size
   number, so the Performance section above no longer states one as fact — a
   previous version of this README claimed `<500ms` / `<50MB` / `15MB` with
