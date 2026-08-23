@@ -32,10 +32,19 @@ jobs:
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Build workspace
-        run: cargo build --workspace --verbose
+        # Deliberately -p pybeamguard-core, not --workspace: bindings/python's
+        # Cargo.toml declares `pyo3 = { features = ["extension-module"] }`
+        # unconditionally (not behind a Cargo feature flag), which needs
+        # maturin's dynamic-lookup linker flags to actually link - a plain
+        # `cargo build --workspace` fails at the link step for the
+        # `pybeamguard` (python bindings) package with "ld: symbol(s) not
+        # found for architecture arm64" on macOS. That crate is only ever
+        # meant to be built via `maturin build`/`maturin develop`, exercised
+        # by the python-bindings job below, not by a bare `cargo build`.
+        run: cargo build -p pybeamguard-core --verbose
 
       - name: Run tests
-        run: cargo test --workspace --verbose
+        run: cargo test -p pybeamguard-core --verbose
 
       - name: Check formatting
         run: cargo fmt --all -- --check
