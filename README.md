@@ -403,6 +403,7 @@ doesn't have access to.
 - Kafka Streams, Ray Data framework support
 - Directory/glob input to `analyze` (currently single-file only)
 - Re-introduce org governance / audit logging as real, tested features if there's demand
+- Configurable/pluggable rule engine (external critique, verified real gap) — all rule data (`HIGH_RISK_PATTERNS`/`MEDIUM_RISK_PATTERNS` in `hotkey.rs`, cost constants in `cost.rs`, join/state thresholds in `spark_join.rs`/`state.rs`) is compiled-in Rust `const` data with no YAML rule files, Python plugin hooks, or Rego/OPA integration — any new/custom rule requires recompiling. Note: the rule-evaluation layer is already cleanly decoupled from parsing/execution via the `Analyzer` trait (`analyzer.rs`) and a generic `run_analyzers` dispatcher — only the rule *data* needs externalizing, not the architecture.
 
 ---
 
