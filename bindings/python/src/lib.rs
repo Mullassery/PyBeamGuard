@@ -12,10 +12,10 @@
 
 use pybeamguard_core::analyzers::registry::{create_analyzers, create_analyzers_by_names};
 use pybeamguard_core::{
-    analyze_flink_pipeline, analyze_pipeline, analyze_spark_pipeline, AnalysisContext,
-    AnalysisResult as RustAnalysisResult, BeamPipelineParser, DataProfile, Finding as RustFinding,
-    Impact, JsonReporter, PipelineIR as RustPipelineIR, Reporter, RiskSeverity, TextReporter,
-    TransformNode as RustTransformNode,
+    analyze_flink_pipeline, analyze_pipeline_with_rules, analyze_spark_pipeline_with_rules,
+    AnalysisContext, AnalysisResult as RustAnalysisResult, BeamPipelineParser, DataProfile,
+    Finding as RustFinding, Impact, JsonReporter, PipelineIR as RustPipelineIR, Reporter,
+    RiskSeverity, RulesConfig, TextReporter, TransformNode as RustTransformNode,
 };
 use pyo3::prelude::*;
 use std::collections::HashMap;
@@ -482,23 +482,16 @@ fn convert_pipeline_ir(ir: &RustPipelineIR) -> PyPipelineIR {
 // ============================================================================
 
 #[pyfunction]
-#[pyo3(signature = (code, data_profile=None))]
-fn analyze(code: String, data_profile: Option<String>) -> PyResult<String> {
-    let profile = if let Some(profile_json) = data_profile {
-        match serde_json::from_str::<DataProfile>(&profile_json) {
-            Ok(p) => Some(p),
-            Err(e) => {
-                return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
-                    "Invalid data profile JSON: {}",
-                    e
-                )))
-            }
-        }
-    } else {
-        None
-    };
+#[pyo3(signature = (code, data_profile=None, rules_yaml=None))]
+fn analyze(
+    code: String,
+    data_profile: Option<String>,
+    rules_yaml: Option<String>,
+) -> PyResult<String> {
+    let profile = parse_data_profile(data_profile)?;
+    let rules = parse_rules(rules_yaml)?;
 
-    let results = analyze_pipeline(&code, profile)
+    let results = analyze_pipeline_with_rules(&code, profile, &rules)
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))?;
 
     serde_json::to_string(&results)
@@ -510,26 +503,16 @@ fn analyze(code: String, data_profile: Option<String>) -> PyResult<String> {
 // ============================================================================
 
 #[pyfunction]
-#[pyo3(signature = (code, data_profile=None))]
+#[pyo3(signature = (code, data_profile=None, rules_yaml=None))]
 fn analyze_structured(
     code: String,
     data_profile: Option<String>,
+    rules_yaml: Option<String>,
 ) -> PyResult<Vec<PyAnalysisResult>> {
-    let profile = if let Some(profile_json) = data_profile {
-        match serde_json::from_str::<DataProfile>(&profile_json) {
-            Ok(p) => Some(p),
-            Err(e) => {
-                return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
-                    "Invalid data profile JSON: {}",
-                    e
-                )))
-            }
-        }
-    } else {
-        None
-    };
+    let profile = parse_data_profile(data_profile)?;
+    let rules = parse_rules(rules_yaml)?;
 
-    let results = analyze_pipeline(&code, profile)
+    let results = analyze_pipeline_with_rules(&code, profile, &rules)
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))?;
 
     Ok(results.iter().map(convert_analysis_result).collect())
@@ -572,11 +555,16 @@ fn analyze_flink_structured(
 }
 
 #[pyfunction]
-#[pyo3(signature = (code, data_profile=None))]
-fn analyze_spark(code: String, data_profile: Option<String>) -> PyResult<String> {
+#[pyo3(signature = (code, data_profile=None, rules_yaml=None))]
+fn analyze_spark(
+    code: String,
+    data_profile: Option<String>,
+    rules_yaml: Option<String>,
+) -> PyResult<String> {
     let profile = parse_data_profile(data_profile)?;
+    let rules = parse_rules(rules_yaml)?;
 
-    let results = analyze_spark_pipeline(&code, profile)
+    let results = analyze_spark_pipeline_with_rules(&code, profile, &rules)
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))?;
 
     serde_json::to_string(&results)
@@ -584,14 +572,16 @@ fn analyze_spark(code: String, data_profile: Option<String>) -> PyResult<String>
 }
 
 #[pyfunction]
-#[pyo3(signature = (code, data_profile=None))]
+#[pyo3(signature = (code, data_profile=None, rules_yaml=None))]
 fn analyze_spark_structured(
     code: String,
     data_profile: Option<String>,
+    rules_yaml: Option<String>,
 ) -> PyResult<Vec<PyAnalysisResult>> {
     let profile = parse_data_profile(data_profile)?;
+    let rules = parse_rules(rules_yaml)?;
 
-    let results = analyze_spark_pipeline(&code, profile)
+    let results = analyze_spark_pipeline_with_rules(&code, profile, &rules)
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))?;
 
     Ok(results.iter().map(convert_analysis_result).collect())
@@ -609,6 +599,18 @@ fn parse_data_profile(data_profile: Option<String>) -> PyResult<Option<DataProfi
                 e
             ))
         })
+}
+
+/// Parses an optional YAML rules document (see `crate::rules::RulesConfig`
+/// in pybeamguard-core) into a `RulesConfig`, defaulting to the built-in
+/// analyzer thresholds when `rules_yaml` is `None`.
+fn parse_rules(rules_yaml: Option<String>) -> PyResult<RulesConfig> {
+    let Some(yaml) = rules_yaml else {
+        return Ok(RulesConfig::default());
+    };
+    RulesConfig::load_from_str(&yaml).map_err(|e| {
+        PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("Invalid rules YAML: {}", e))
+    })
 }
 
 // ============================================================================
@@ -668,7 +670,7 @@ impl PyAnalyzerInfo {
 
 #[pyfunction]
 fn get_available_analyzers() -> PyResult<Vec<PyAnalyzerInfo>> {
-    let analyzers = create_analyzers();
+    let analyzers = create_analyzers(&RulesConfig::default());
     let infos: Vec<PyAnalyzerInfo> = analyzers
         .iter()
         .map(|a| PyAnalyzerInfo {
@@ -686,25 +688,15 @@ fn get_available_analyzers() -> PyResult<Vec<PyAnalyzerInfo>> {
 // ============================================================================
 
 #[pyfunction]
-#[pyo3(signature = (code, analyzer_names, data_profile=None))]
+#[pyo3(signature = (code, analyzer_names, data_profile=None, rules_yaml=None))]
 fn analyze_with_analyzers(
     code: String,
     analyzer_names: Vec<String>,
     data_profile: Option<String>,
+    rules_yaml: Option<String>,
 ) -> PyResult<Vec<PyAnalysisResult>> {
-    let profile = if let Some(profile_json) = data_profile {
-        match serde_json::from_str::<DataProfile>(&profile_json) {
-            Ok(p) => Some(p),
-            Err(e) => {
-                return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
-                    "Invalid data profile JSON: {}",
-                    e
-                )))
-            }
-        }
-    } else {
-        None
-    };
+    let profile = parse_data_profile(data_profile)?;
+    let rules = parse_rules(rules_yaml)?;
 
     // Parse pipeline
     let parser = BeamPipelineParser::new();
@@ -718,7 +710,7 @@ fn analyze_with_analyzers(
 
     // Filter analyzers by name
     let names: Vec<&str> = analyzer_names.iter().map(|s| s.as_str()).collect();
-    let analyzers = create_analyzers_by_names(&names);
+    let analyzers = create_analyzers_by_names(&names, &rules);
 
     if analyzers.is_empty() {
         return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
@@ -749,23 +741,16 @@ fn analyze_with_analyzers(
 // ============================================================================
 
 #[pyfunction]
-#[pyo3(signature = (code, data_profile=None))]
-fn get_json_report(code: String, data_profile: Option<String>) -> PyResult<String> {
-    let profile = if let Some(profile_json) = data_profile {
-        match serde_json::from_str::<DataProfile>(&profile_json) {
-            Ok(p) => Some(p),
-            Err(e) => {
-                return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
-                    "Invalid data profile JSON: {}",
-                    e
-                )))
-            }
-        }
-    } else {
-        None
-    };
+#[pyo3(signature = (code, data_profile=None, rules_yaml=None))]
+fn get_json_report(
+    code: String,
+    data_profile: Option<String>,
+    rules_yaml: Option<String>,
+) -> PyResult<String> {
+    let profile = parse_data_profile(data_profile)?;
+    let rules = parse_rules(rules_yaml)?;
 
-    let results = analyze_pipeline(&code, profile)
+    let results = analyze_pipeline_with_rules(&code, profile, &rules)
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))?;
 
     let reporter = JsonReporter;
@@ -777,23 +762,16 @@ fn get_json_report(code: String, data_profile: Option<String>) -> PyResult<Strin
 // ============================================================================
 
 #[pyfunction]
-#[pyo3(signature = (code, data_profile=None))]
-fn get_text_report(code: String, data_profile: Option<String>) -> PyResult<String> {
-    let profile = if let Some(profile_json) = data_profile {
-        match serde_json::from_str::<DataProfile>(&profile_json) {
-            Ok(p) => Some(p),
-            Err(e) => {
-                return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
-                    "Invalid data profile JSON: {}",
-                    e
-                )))
-            }
-        }
-    } else {
-        None
-    };
+#[pyo3(signature = (code, data_profile=None, rules_yaml=None))]
+fn get_text_report(
+    code: String,
+    data_profile: Option<String>,
+    rules_yaml: Option<String>,
+) -> PyResult<String> {
+    let profile = parse_data_profile(data_profile)?;
+    let rules = parse_rules(rules_yaml)?;
 
-    let results = analyze_pipeline(&code, profile)
+    let results = analyze_pipeline_with_rules(&code, profile, &rules)
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))?;
 
     let reporter = TextReporter;
@@ -827,19 +805,29 @@ fn get_flink_text_report(code: String, data_profile: Option<String>) -> PyResult
 }
 
 #[pyfunction]
-#[pyo3(signature = (code, data_profile=None))]
-fn get_spark_json_report(code: String, data_profile: Option<String>) -> PyResult<String> {
+#[pyo3(signature = (code, data_profile=None, rules_yaml=None))]
+fn get_spark_json_report(
+    code: String,
+    data_profile: Option<String>,
+    rules_yaml: Option<String>,
+) -> PyResult<String> {
     let profile = parse_data_profile(data_profile)?;
-    let results = analyze_spark_pipeline(&code, profile)
+    let rules = parse_rules(rules_yaml)?;
+    let results = analyze_spark_pipeline_with_rules(&code, profile, &rules)
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))?;
     Ok(JsonReporter.format(&results))
 }
 
 #[pyfunction]
-#[pyo3(signature = (code, data_profile=None))]
-fn get_spark_text_report(code: String, data_profile: Option<String>) -> PyResult<String> {
+#[pyo3(signature = (code, data_profile=None, rules_yaml=None))]
+fn get_spark_text_report(
+    code: String,
+    data_profile: Option<String>,
+    rules_yaml: Option<String>,
+) -> PyResult<String> {
     let profile = parse_data_profile(data_profile)?;
-    let results = analyze_spark_pipeline(&code, profile)
+    let rules = parse_rules(rules_yaml)?;
+    let results = analyze_spark_pipeline_with_rules(&code, profile, &rules)
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))?;
     Ok(TextReporter.format(&results))
 }
@@ -849,26 +837,16 @@ fn get_spark_text_report(code: String, data_profile: Option<String>) -> PyResult
 // ============================================================================
 
 #[pyfunction]
-#[pyo3(signature = (code, analyzer_names, report_format = "json", data_profile=None))]
+#[pyo3(signature = (code, analyzer_names, report_format = "json", data_profile=None, rules_yaml=None))]
 fn analyze_and_format(
     code: String,
     analyzer_names: Vec<String>,
     report_format: &str,
     data_profile: Option<String>,
+    rules_yaml: Option<String>,
 ) -> PyResult<String> {
-    let profile = if let Some(profile_json) = data_profile {
-        match serde_json::from_str::<DataProfile>(&profile_json) {
-            Ok(p) => Some(p),
-            Err(e) => {
-                return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
-                    "Invalid data profile JSON: {}",
-                    e
-                )))
-            }
-        }
-    } else {
-        None
-    };
+    let profile = parse_data_profile(data_profile)?;
+    let rules = parse_rules(rules_yaml)?;
 
     // Parse pipeline
     let parser = BeamPipelineParser::new();
@@ -882,7 +860,7 @@ fn analyze_and_format(
 
     // Filter analyzers by name
     let names: Vec<&str> = analyzer_names.iter().map(|s| s.as_str()).collect();
-    let analyzers = create_analyzers_by_names(&names);
+    let analyzers = create_analyzers_by_names(&names, &rules);
 
     if analyzers.is_empty() {
         return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(

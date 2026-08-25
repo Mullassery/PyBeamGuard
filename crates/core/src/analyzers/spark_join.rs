@@ -1,33 +1,31 @@
 use crate::analyzer::*;
 use crate::ir::*;
+use crate::rules::SparkJoinRules;
 use std::collections::HashMap;
-
-// Same high-risk key-domain heuristic used by Beam's `HotKeyAnalyzer` and
-// Flink's `FlinkStateAnalyzer`, applied to Spark join keys: these domains
-// are the usual suspects for skewed shuffle joins (a handful of tenants/
-// customers dominate the row count).
-const HIGH_RISK_PATTERNS: &[&str] = &[
-    "customer",
-    "tenant",
-    "org",
-    "account",
-    "user",
-    "organization",
-    "client",
-    "partner",
-    "company",
-];
-
-/// 1GB. Spark's default `autoBroadcastJoinThreshold` is 10MB; a threshold
-/// raised well past this risks broadcasting a table large enough to exhaust
-/// driver or executor memory when it's collected for the broadcast.
-const BROADCAST_THRESHOLD_HIGH_RISK_BYTES: i64 = 1_073_741_824;
 
 /// Analyzes Spark join strategy: `autoBroadcastJoinThreshold`
 /// misconfiguration (disabled or dangerously high), and join keys that look
 /// likely to be skewed (the Spark analog of Beam's hot-key detection,
 /// applied to shuffle join keys instead of GroupByKey).
-pub struct SparkJoinAnalyzer;
+///
+/// Rule data (risk-pattern keywords, broadcast threshold, cardinality
+/// thresholds) is injected via `rules` -- see `crate::rules::SparkJoinRules`
+/// -- instead of the `const`s this used to hardcode.
+pub struct SparkJoinAnalyzer {
+    rules: SparkJoinRules,
+}
+
+impl SparkJoinAnalyzer {
+    pub fn new(rules: SparkJoinRules) -> Self {
+        SparkJoinAnalyzer { rules }
+    }
+}
+
+impl Default for SparkJoinAnalyzer {
+    fn default() -> Self {
+        SparkJoinAnalyzer::new(SparkJoinRules::default())
+    }
+}
 
 impl Analyzer for SparkJoinAnalyzer {
     fn name(&self) -> &str {
@@ -79,7 +77,7 @@ impl Analyzer for SparkJoinAnalyzer {
                         }),
                         confidence: 0.65,
                     });
-                } else if threshold > BROADCAST_THRESHOLD_HIGH_RISK_BYTES {
+                } else if threshold > self.rules.broadcast_threshold_high_risk_bytes {
                     findings.push(Finding {
                         id: "SPARK_BROADCAST_THRESHOLD_EXCESSIVE".to_string(),
                         severity: RiskSeverity::High,
@@ -155,7 +153,7 @@ impl SparkJoinAnalyzer {
     ) -> Option<Finding> {
         let measured_cardinality = profile.and_then(|p| p.key_cardinality);
         if let Some(cardinality) = measured_cardinality {
-            if cardinality > 0 && cardinality < 1_000 {
+            if cardinality > 0 && (cardinality as u64) < self.rules.low_cardinality_threshold {
                 return Some(Finding {
                     id: "SPARK_JOIN_LOW_CARDINALITY_MEASURED".to_string(),
                     severity: RiskSeverity::Critical,
@@ -181,9 +179,10 @@ impl SparkJoinAnalyzer {
         }
 
         let key_lower = key_expr.to_lowercase();
-        for pattern in HIGH_RISK_PATTERNS {
-            if key_lower.contains(pattern) {
-                let high_cardinality_measured = measured_cardinality.is_some_and(|c| c >= 100_000);
+        for pattern in &self.rules.high_risk_patterns {
+            if key_lower.contains(pattern.as_str()) {
+                let high_cardinality_measured = measured_cardinality
+                    .is_some_and(|c| (c as u64) >= self.rules.high_cardinality_downgrade_threshold);
                 let severity = if high_cardinality_measured {
                     RiskSeverity::Medium
                 } else {
@@ -253,7 +252,7 @@ mod tests {
             pipeline_ir: ir,
             data_profile: None,
         };
-        let result = SparkJoinAnalyzer.analyze(&ctx).unwrap();
+        let result = SparkJoinAnalyzer::default().analyze(&ctx).unwrap();
         assert!(result
             .findings
             .iter()
@@ -269,7 +268,7 @@ mod tests {
             pipeline_ir: ir,
             data_profile: None,
         };
-        let result = SparkJoinAnalyzer.analyze(&ctx).unwrap();
+        let result = SparkJoinAnalyzer::default().analyze(&ctx).unwrap();
         assert!(result
             .findings
             .iter()
@@ -286,7 +285,7 @@ mod tests {
             pipeline_ir: ir,
             data_profile: None,
         };
-        let result = SparkJoinAnalyzer.analyze(&ctx).unwrap();
+        let result = SparkJoinAnalyzer::default().analyze(&ctx).unwrap();
         assert!(result
             .findings
             .iter()
@@ -302,7 +301,7 @@ mod tests {
             pipeline_ir: ir,
             data_profile: None,
         };
-        let result = SparkJoinAnalyzer.analyze(&ctx).unwrap();
+        let result = SparkJoinAnalyzer::default().analyze(&ctx).unwrap();
         assert!(result
             .findings
             .iter()
@@ -328,7 +327,7 @@ mod tests {
                 estimated_state_size_gb: None,
             }),
         };
-        let result = SparkJoinAnalyzer.analyze(&ctx).unwrap();
+        let result = SparkJoinAnalyzer::default().analyze(&ctx).unwrap();
         assert!(result
             .findings
             .iter()

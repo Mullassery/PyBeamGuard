@@ -1,14 +1,29 @@
 use crate::analyzer::*;
 use crate::ir::*;
+use crate::rules::StateRules;
 use std::collections::HashMap;
 
-/// Above this measured state size, a single stateful pipeline is large
-/// enough that unbounded growth (missing TTL/cleanup) becomes an operational
-/// emergency rather than a slow-burn cost concern -- worth escalating past
-/// the flat `STATE_UNBOUNDED_GROWTH` finding below.
-const LARGE_MEASURED_STATE_SIZE_GB: f64 = 500.0;
+/// The large-measured-state-size threshold is injected via `rules` (see
+/// `crate::rules::StateRules`) instead of a hardcoded `const`: above it, a
+/// single stateful pipeline is large enough that unbounded growth (missing
+/// TTL/cleanup) becomes an operational emergency rather than a slow-burn
+/// cost concern -- worth escalating past the flat `STATE_UNBOUNDED_GROWTH`
+/// finding below.
+pub struct StateAnalyzer {
+    rules: StateRules,
+}
 
-pub struct StateAnalyzer;
+impl StateAnalyzer {
+    pub fn new(rules: StateRules) -> Self {
+        StateAnalyzer { rules }
+    }
+}
+
+impl Default for StateAnalyzer {
+    fn default() -> Self {
+        StateAnalyzer::new(StateRules::default())
+    }
+}
 
 impl Analyzer for StateAnalyzer {
     fn name(&self) -> &str {
@@ -140,7 +155,7 @@ impl Analyzer for StateAnalyzer {
         if let Some(state_size_gb) = profile.and_then(|p| p.estimated_state_size_gb) {
             metrics.insert("data_profile_state_size_gb".to_string(), state_size_gb);
 
-            if state_size_gb > LARGE_MEASURED_STATE_SIZE_GB {
+            if state_size_gb > self.rules.large_measured_state_size_gb {
                 findings.push(Finding {
                     id: "STATE_SIZE_MEASURED_CRITICAL".to_string(),
                     severity: RiskSeverity::Critical,
@@ -213,7 +228,7 @@ mod tests {
             line_number: None,
         });
 
-        let analyzer = StateAnalyzer;
+        let analyzer = StateAnalyzer::default();
         let ctx = AnalysisContext {
             pipeline_ir: ir,
             data_profile: None,
@@ -254,7 +269,7 @@ mod tests {
                 estimated_state_size_gb: Some(800.0),
             }),
         };
-        let result = StateAnalyzer.analyze(&ctx).unwrap();
+        let result = StateAnalyzer::default().analyze(&ctx).unwrap();
         assert!(result.findings.iter().any(
             |f| f.id == "STATE_SIZE_MEASURED_CRITICAL" && f.severity == RiskSeverity::Critical
         ));
@@ -278,7 +293,7 @@ mod tests {
                 estimated_state_size_gb: Some(5.0),
             }),
         };
-        let result = StateAnalyzer.analyze(&ctx).unwrap();
+        let result = StateAnalyzer::default().analyze(&ctx).unwrap();
         assert!(!result
             .findings
             .iter()

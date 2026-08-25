@@ -1,34 +1,47 @@
 use crate::analyzer::*;
 use crate::ir::*;
+use crate::rules::CostRules;
 use std::collections::HashMap;
-
-pub struct CostAnalyzer;
 
 // ----------------------------------------------------------------------------
 // Cost model assumptions (heuristic, NOT validated against live GCP billing)
 // ----------------------------------------------------------------------------
-// These constants back an order-of-magnitude, pre-deployment cost signal for
+// These rates back an order-of-magnitude, pre-deployment cost signal for
 // CI/triage purposes. They are NOT a substitute for the GCP Pricing
 // Calculator or an actual test run, and this analyzer's `confidence` field
-// reflects that uncertainty explicitly.
+// reflects that uncertainty explicitly. Overridable via `rules` (see
+// `crate::rules::CostRules`); `CostRules::default()` reproduces the values
+// that used to be hardcoded `const`s here:
 //
-// - PERSISTENT_DISK_COST_PER_GB_MONTH is anchored to GCP's published
+// - persistent_disk_cost_per_gb_month is anchored to GCP's published
 //   pd-standard list price in us-central1 (~$0.04/GB-month as of the time
 //   this comment was written); this is the one figure here with a direct,
 //   checkable public price.
-// - WORKER_MACHINE_COST_PER_HOUR is a blended proxy for a mid-size Dataflow
+// - worker_machine_cost_per_hour is a blended proxy for a mid-size Dataflow
 //   worker (roughly n1-standard-2/4 class). Dataflow's actual billing is
 //   per-vCPU-hour + per-GB-memory-hour (+ PD), not a flat per-VM rate, so
 //   this is deliberately a simplification, not a machine-type-specific rate.
-// - DATAFLOW_SHUFFLE_COST_PER_GB is a rough proxy for Dataflow Shuffle /
+// - dataflow_shuffle_cost_per_gb is a rough proxy for Dataflow Shuffle /
 //   Streaming Engine data-processed pricing, which varies by tier and is not
 //   published as a single flat per-GB figure.
 //
 // Treat CostAnalyzer's dollar output as a directional planning signal
 // ("is this pipeline cheap, moderate, or expensive"), not a bill forecast.
-const DATAFLOW_SHUFFLE_COST_PER_GB: f64 = 0.30;
-const WORKER_MACHINE_COST_PER_HOUR: f64 = 0.35;
-const PERSISTENT_DISK_COST_PER_GB_MONTH: f64 = 0.04;
+pub struct CostAnalyzer {
+    rules: CostRules,
+}
+
+impl CostAnalyzer {
+    pub fn new(rules: CostRules) -> Self {
+        CostAnalyzer { rules }
+    }
+}
+
+impl Default for CostAnalyzer {
+    fn default() -> Self {
+        CostAnalyzer::new(CostRules::default())
+    }
+}
 
 impl Analyzer for CostAnalyzer {
     fn name(&self) -> &str {
@@ -148,7 +161,7 @@ impl CostAnalyzer {
     ) -> (f64, f64, f64, f64) {
         // Heuristic-based estimation
         let base_worker_hours = (ir.nodes.len() as f64) * 10.0; // Rough estimate: 10h per stage
-        let compute_cost = base_worker_hours * WORKER_MACHINE_COST_PER_HOUR;
+        let compute_cost = base_worker_hours * self.rules.worker_machine_cost_per_hour;
 
         // Shuffle cost proportional to number of shuffle operations. When a
         // data profile supplies real throughput and element size, use that
@@ -173,7 +186,7 @@ impl CostAnalyzer {
             }
             None => (shuffle_count as f64) * 50.0, // Assume 50GB per shuffle
         };
-        let shuffle_cost = estimated_shuffle_volume_gb * DATAFLOW_SHUFFLE_COST_PER_GB;
+        let shuffle_cost = estimated_shuffle_volume_gb * self.rules.dataflow_shuffle_cost_per_gb;
 
         // State cost proportional to stateful operations. Prefer the
         // caller-supplied state size over the flat 10GB-per-stateful-op
@@ -187,7 +200,7 @@ impl CostAnalyzer {
             Some(gb) => gb,
             None => (stateful_count as f64) * 10.0, // Assume 10GB state per stateful op
         };
-        let state_cost = estimated_state_size_gb * PERSISTENT_DISK_COST_PER_GB_MONTH;
+        let state_cost = estimated_state_size_gb * self.rules.persistent_disk_cost_per_gb_month;
 
         let total_cost = compute_cost + shuffle_cost + state_cost;
 
@@ -202,7 +215,7 @@ mod tests {
     #[test]
     fn test_simple_cost_estimation() {
         let ir = PipelineIR::new("test".to_string());
-        let analyzer = CostAnalyzer;
+        let analyzer = CostAnalyzer::default();
         let ctx = AnalysisContext {
             pipeline_ir: ir,
             data_profile: None,
@@ -229,7 +242,7 @@ mod tests {
             line_number: None,
         });
 
-        let analyzer = CostAnalyzer;
+        let analyzer = CostAnalyzer::default();
         let ctx_no_profile = AnalysisContext {
             pipeline_ir: ir.clone(),
             data_profile: None,

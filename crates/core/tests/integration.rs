@@ -10,7 +10,8 @@
 //! third-party/PR-submitted pipeline code.
 
 use pybeamguard_core::{
-    analyze_flink_pipeline, analyze_pipeline, analyze_spark_pipeline, DataProfile,
+    analyze_flink_pipeline, analyze_pipeline, analyze_pipeline_with_rules, analyze_spark_pipeline,
+    analyze_spark_pipeline_with_rules, DataProfile, RulesConfig,
 };
 
 const REALISTIC_STREAMING_PIPELINE: &str = r#"
@@ -308,4 +309,86 @@ fn analyze_spark_pipeline_realistic_source_end_to_end() {
 fn analyze_spark_pipeline_rejects_non_spark_source() {
     let result = analyze_spark_pipeline("print('not spark')", None);
     assert!(result.is_err());
+}
+
+// ----------------------------------------------------------------------------
+// External YAML rules end-to-end: proves a custom `RulesConfig` genuinely
+// changes analyzer output through the full parse -> analyze path, not just
+// in the analyzer unit tests colocated with each rules struct.
+// ----------------------------------------------------------------------------
+
+const BEAM_PIPELINE_WITH_REGION_KEY: &str = r#"
+import apache_beam as beam
+
+with beam.Pipeline() as p:
+    (p
+     | 'Read' >> beam.io.ReadFromText('input.txt')
+     | 'GroupByRegion' >> beam.GroupByKey('region')
+    )
+"#;
+
+#[test]
+fn custom_hotkey_rules_yaml_changes_beam_analysis_end_to_end() {
+    let default_results = analyze_pipeline(BEAM_PIPELINE_WITH_REGION_KEY, None)
+        .expect("pipeline should analyze with default rules");
+    let default_findings: Vec<&str> = default_results
+        .iter()
+        .flat_map(|r| r.findings.iter().map(|f| f.id.as_str()))
+        .collect();
+    assert!(
+        !default_findings.contains(&"HOTKEY_HIGH_RISK"),
+        "'region' is not a built-in high-risk pattern, so this should NOT be flagged by default"
+    );
+
+    let rules = RulesConfig::load_from_str("hotkey:\n  high_risk_patterns: [\"region\"]\n")
+        .expect("valid YAML rules should parse");
+    let custom_results = analyze_pipeline_with_rules(BEAM_PIPELINE_WITH_REGION_KEY, None, &rules)
+        .expect("pipeline should analyze with custom rules");
+    let custom_findings: Vec<&str> = custom_results
+        .iter()
+        .flat_map(|r| r.findings.iter().map(|f| f.id.as_str()))
+        .collect();
+    assert!(
+        custom_findings.contains(&"HOTKEY_HIGH_RISK"),
+        "with 'region' added as a high-risk pattern via YAML rules, this key should now be flagged"
+    );
+}
+
+const SPARK_PIPELINE_WITH_REGION_JOIN: &str = r#"
+from pyspark.sql import SparkSession
+
+spark = SparkSession.builder.appName("orders").getOrCreate()
+
+df1 = spark.read.parquet("orders")
+df2 = spark.read.parquet("regions")
+joined = df1.join(df2, on="region_id")
+joined.write.parquet("output")
+"#;
+
+#[test]
+fn custom_spark_join_rules_yaml_changes_spark_analysis_end_to_end() {
+    let default_results = analyze_spark_pipeline(SPARK_PIPELINE_WITH_REGION_JOIN, None)
+        .expect("Spark pipeline should analyze with default rules");
+    let default_findings: Vec<&str> = default_results
+        .iter()
+        .flat_map(|r| r.findings.iter().map(|f| f.id.as_str()))
+        .collect();
+    assert!(
+        !default_findings.contains(&"SPARK_JOIN_HIGH_RISK_KEY"),
+        "'region_id' is not a built-in high-risk pattern, so this should NOT be flagged by default"
+    );
+
+    let rules = RulesConfig::load_from_str("spark_join:\n  high_risk_patterns: [\"region\"]\n")
+        .expect("valid YAML rules should parse");
+    let custom_results =
+        analyze_spark_pipeline_with_rules(SPARK_PIPELINE_WITH_REGION_JOIN, None, &rules)
+            .expect("Spark pipeline should analyze with custom rules");
+    let custom_findings: Vec<&str> = custom_results
+        .iter()
+        .flat_map(|r| r.findings.iter().map(|f| f.id.as_str()))
+        .collect();
+    assert!(
+        custom_findings.contains(&"SPARK_JOIN_HIGH_RISK_KEY"),
+        "with 'region' added as a high-risk pattern via YAML rules, this join key should now be flagged"
+    );
 }

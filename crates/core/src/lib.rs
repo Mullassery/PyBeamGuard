@@ -4,6 +4,7 @@ pub mod frameworks;
 pub mod ir;
 pub mod parser;
 pub mod reporting;
+pub mod rules;
 
 pub use analyzer::{
     AnalysisContext, AnalysisResult, Analyzer, DataProfile, Finding, FindingType, Impact,
@@ -15,10 +16,23 @@ pub use ir::{
 };
 pub use parser::BeamPipelineParser;
 pub use reporting::{JsonReporter, Reporter, TextReporter};
+pub use rules::{CostRules, HotKeyRules, RulesConfig, SparkJoinRules, StateRules};
 
 pub fn analyze_pipeline(
     python_code: &str,
     data_profile: Option<DataProfile>,
+) -> anyhow::Result<Vec<AnalysisResult>> {
+    analyze_pipeline_with_rules(python_code, data_profile, &RulesConfig::default())
+}
+
+/// Same as [`analyze_pipeline`], but with analyzer rule data (risk-pattern
+/// keyword lists, cost rates, cardinality/size thresholds) overridden by
+/// `rules` instead of each analyzer's hardcoded defaults -- see
+/// [`rules::RulesConfig`].
+pub fn analyze_pipeline_with_rules(
+    python_code: &str,
+    data_profile: Option<DataProfile>,
+    rules: &RulesConfig,
 ) -> anyhow::Result<Vec<AnalysisResult>> {
     let parser = BeamPipelineParser::new();
     let ir = parser.parse(python_code)?;
@@ -28,7 +42,7 @@ pub fn analyze_pipeline(
         data_profile,
     };
 
-    let analyzers = analyzers::registry::create_analyzers();
+    let analyzers = analyzers::registry::create_analyzers(rules);
     run_analyzers(&context, analyzers)
 }
 
@@ -59,6 +73,16 @@ pub fn analyze_spark_pipeline(
     code: &str,
     data_profile: Option<DataProfile>,
 ) -> anyhow::Result<Vec<AnalysisResult>> {
+    analyze_spark_pipeline_with_rules(code, data_profile, &RulesConfig::default())
+}
+
+/// Same as [`analyze_spark_pipeline`], but with `SparkJoinAnalyzer`'s rule
+/// data overridden by `rules` -- see [`rules::RulesConfig`].
+pub fn analyze_spark_pipeline_with_rules(
+    code: &str,
+    data_profile: Option<DataProfile>,
+    rules: &RulesConfig,
+) -> anyhow::Result<Vec<AnalysisResult>> {
     let parser = SparkFrameworkParser::new();
     let ir = parser.parse(code)?;
 
@@ -67,7 +91,7 @@ pub fn analyze_spark_pipeline(
         data_profile,
     };
 
-    let analyzers = analyzers::registry::create_spark_analyzers();
+    let analyzers = analyzers::registry::create_spark_analyzers(rules);
     run_analyzers(&context, analyzers)
 }
 

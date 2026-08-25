@@ -1,6 +1,7 @@
 use pybeamguard_core::{
-    analyze_flink_pipeline, analyze_pipeline, analyze_spark_pipeline, reporting::JsonReporter,
-    reporting::Reporter, reporting::TextReporter, AnalysisResult, DataProfile, RiskSeverity,
+    analyze_flink_pipeline, analyze_pipeline_with_rules, analyze_spark_pipeline_with_rules,
+    reporting::JsonReporter, reporting::Reporter, reporting::TextReporter, AnalysisResult,
+    DataProfile, RiskSeverity, RulesConfig,
 };
 use std::fs;
 use std::io::Read;
@@ -47,7 +48,7 @@ fn parse_severity(s: &str) -> Option<RiskSeverity> {
 fn cmd_analyze(args: &[&str]) {
     if args.is_empty() {
         eprintln!(
-            "Usage: pybeamguard analyze <pipeline.py> [--framework beam|flink|spark] [--data-profile <profile.json>] [--format json|text] [--fail-on <severity>]"
+            "Usage: pybeamguard analyze <pipeline.py> [--framework beam|flink|spark] [--data-profile <profile.json>] [--rules <rules.yaml>] [--format json|text] [--fail-on <severity>]"
         );
         std::process::exit(1);
     }
@@ -55,6 +56,7 @@ fn cmd_analyze(args: &[&str]) {
     let pipeline_file = args[0];
     let mut format = "text";
     let mut data_profile_file: Option<&str> = None;
+    let mut rules_file: Option<&str> = None;
     let mut fail_on: Option<RiskSeverity> = None;
     let mut framework = "beam";
 
@@ -93,6 +95,15 @@ fn cmd_analyze(args: &[&str]) {
                     i += 2;
                 } else {
                     eprintln!("--data-profile requires a file path");
+                    std::process::exit(1);
+                }
+            }
+            "--rules" => {
+                if i + 1 < args.len() {
+                    rules_file = Some(args[i + 1]);
+                    i += 2;
+                } else {
+                    eprintln!("--rules requires a file path");
                     std::process::exit(1);
                 }
             }
@@ -152,11 +163,27 @@ fn cmd_analyze(args: &[&str]) {
         None
     };
 
+    // Load rules file if provided. Flink has no rules-driven analyzers yet
+    // (its suite is checkpointing/state-backend/watermark, not the
+    // pattern/threshold-driven analyzers rules.rs externalizes), so
+    // `--rules` with `--framework flink` is accepted but has no effect.
+    let rules = if let Some(path) = rules_file {
+        match RulesConfig::load_from_file(std::path::Path::new(path)) {
+            Ok(r) => r,
+            Err(e) => {
+                eprintln!("Error loading rules file '{}': {}", path, e);
+                std::process::exit(1);
+            }
+        }
+    } else {
+        RulesConfig::default()
+    };
+
     // Run analysis
     let analysis: anyhow::Result<Vec<AnalysisResult>> = match framework {
         "flink" => analyze_flink_pipeline(&pipeline_code, data_profile),
-        "spark" => analyze_spark_pipeline(&pipeline_code, data_profile),
-        _ => analyze_pipeline(&pipeline_code, data_profile),
+        "spark" => analyze_spark_pipeline_with_rules(&pipeline_code, data_profile, &rules),
+        _ => analyze_pipeline_with_rules(&pipeline_code, data_profile, &rules),
     };
 
     match analysis {
@@ -216,6 +243,9 @@ OPTIONS for 'analyze':
     <pipeline.py>           Path to pipeline source file (required)
     --framework FRAMEWORK   Pipeline framework: beam (default), flink, or spark
     --data-profile FILE     Path to data profile JSON file (optional)
+    --rules FILE            Path to a YAML rules file overriding analyzer
+                             thresholds/patterns (optional; beam and spark
+                             only, see RULES FILE FORMAT below)
     --format FORMAT         Output format: text (default) or json
     --fail-on SEVERITY      Exit non-zero if any finding is >= this severity
                              (info|low|medium|high|critical)
@@ -233,6 +263,9 @@ EXAMPLES:
     # With data profile
     pybeamguard analyze pipeline.py --data-profile profile.json
 
+    # With custom rule thresholds
+    pybeamguard analyze pipeline.py --rules rules.yaml
+
     # JSON output
     pybeamguard analyze pipeline.py --format json
 
@@ -246,6 +279,25 @@ DATA PROFILE FORMAT:
         "key_cardinality": 50000,
         "estimated_state_size_gb": 5.0
     }}
+
+RULES FILE FORMAT (all sections/fields optional; omitted ones keep their
+built-in default):
+    hotkey:
+      high_risk_patterns: ["customer", "tenant"]
+      medium_risk_patterns: ["hour", "day"]
+      low_cardinality_threshold: 1000
+      high_cardinality_downgrade_threshold: 100000
+    cost:
+      dataflow_shuffle_cost_per_gb: 0.30
+      worker_machine_cost_per_hour: 0.35
+      persistent_disk_cost_per_gb_month: 0.04
+    spark_join:
+      high_risk_patterns: ["customer", "tenant"]
+      broadcast_threshold_high_risk_bytes: 1073741824
+      low_cardinality_threshold: 1000
+      high_cardinality_downgrade_threshold: 100000
+    state:
+      large_measured_state_size_gb: 500.0
 "#
     );
 }

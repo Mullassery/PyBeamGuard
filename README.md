@@ -151,6 +151,41 @@ pybeamguard analyze streaming_job.py --framework flink
 pybeamguard analyze etl.py --framework spark
 ```
 
+### Configurable Rule Engine (YAML)
+
+The Hot Key, Cost, Spark Join, and State analyzers' rule data (risk-pattern
+keyword lists, cardinality/size thresholds, cost rates) is no longer
+compiled-in `const` data — it's loaded from a `RulesConfig`, which defaults
+to the exact values that used to be hardcoded but can be overridden with a
+YAML file:
+
+```yaml
+# rules.yaml — every section/field is optional; anything omitted keeps its
+# built-in default (see PARTIAL override semantics below).
+hotkey:
+  high_risk_patterns: ["customer", "tenant", "region"]  # add your own domain keywords
+  low_cardinality_threshold: 500
+cost:
+  worker_machine_cost_per_hour: 0.42  # match your actual machine type's rate
+spark_join:
+  broadcast_threshold_high_risk_bytes: 536870912
+state:
+  large_measured_state_size_gb: 250.0
+```
+
+```bash
+pybeamguard analyze pipeline.py --rules rules.yaml
+pybeamguard analyze etl.py --framework spark --rules rules.yaml
+```
+
+A file only needs to set the fields it wants to change — untouched
+sections/fields keep their default. This is available both from the Rust
+CLI (`--rules <path>`) and the Python bindings
+(`analyze(code, rules_yaml=...)`, `analyze_spark(...)`, `get_json_report(...)`,
+etc. all accept an optional `rules_yaml` string). Flink's analyzer suite
+(checkpointing/state-backend/watermark) has no rule-driven thresholds, so
+`--rules` has no effect with `--framework flink`.
+
 ---
 
 ## Use Cases
@@ -324,7 +359,7 @@ scale"). What's verifiable today:
 
 | Metric | Value |
 |--------|-------|
-| **Tests** | ~73 Rust unit tests + 11 integration tests + 18 Python binding/CLI tests (see CI badge for the exact, current count) |
+| **Tests** | ~78 Rust unit tests + 13 integration tests + 23 Python binding/CLI tests (see CI badge for the exact, current count) |
 
 ---
 
@@ -386,8 +421,8 @@ and tested today:
 - Python bindings via PyO3 abi3, real `pip install`-able package
 - `--fail-on <severity>` CI gating and `--data-profile`-informed cost/hot-key estimates
 - Rust unit + integration tests, Python binding/CLI tests -- verified by
-  running them directly (`cargo test -p pybeamguard-core`: 73 unit + 11
-  integration tests passing; `pytest tests/`: 18 Python tests passing),
+  running them directly (`cargo test -p pybeamguard-core`: 78 unit + 13
+  integration tests passing; `pytest tests/`: 23 Python tests passing),
   and CI is green running the same commands
 - <500ms analysis per pipeline (small/medium pipelines; not independently benchmarked at scale)
 
@@ -403,7 +438,10 @@ doesn't have access to.
 - Kafka Streams, Ray Data framework support
 - Directory/glob input to `analyze` (currently single-file only)
 - Re-introduce org governance / audit logging as real, tested features if there's demand
-- Configurable/pluggable rule engine (external critique, verified real gap) — all rule data (`HIGH_RISK_PATTERNS`/`MEDIUM_RISK_PATTERNS` in `hotkey.rs`, cost constants in `cost.rs`, join/state thresholds in `spark_join.rs`/`state.rs`) is compiled-in Rust `const` data with no YAML rule files, Python plugin hooks, or Rego/OPA integration — any new/custom rule requires recompiling. Note: the rule-evaluation layer is already cleanly decoupled from parsing/execution via the `Analyzer` trait (`analyzer.rs`) and a generic `run_analyzers` dispatcher — only the rule *data* needs externalizing, not the architecture.
+- Python plugin hooks / Rego/OPA integration for rule *logic* (not just rule
+  *data*) — out of scope for now. **Done:** rule *data* externalization
+  (`HIGH_RISK_PATTERNS`/`MEDIUM_RISK_PATTERNS`/cost rates/thresholds) via
+  YAML — see "Configurable Rule Engine (YAML)" above.
 
 ---
 
@@ -433,8 +471,8 @@ doesn't have access to.
   previous version of this README claimed `<500ms` / `<50MB` / `15MB` with
   nothing checked in to reproduce those figures.
 - The Rust/Python test counts previously stated in this README (`29 Rust unit
-  tests + 7 integration tests`) were stale; the current source has roughly 73
-  `#[test]`-annotated Rust unit tests, 11 Rust integration tests, and 18
+  tests + 7 integration tests`) were stale; the current source has roughly 78
+  `#[test]`-annotated Rust unit tests, 13 Rust integration tests, and 23
   Python tests (counted via `grep`, not a full `cargo test`/`pytest` run — see
   the CI badge for the authoritative, current count).
 - No open GitHub issues and no `TODO`/`FIXME`/`XXX` markers found in `crates/`

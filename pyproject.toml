@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "pybeamguard"
-version = "1.1.2"
+version = "1.2.0"
 description = "Apache Beam & Dataflow pipeline analysis, reliability validation, and cost optimization platform"
 readme = "README.md"
 license = {text = "Proprietary License — Free to use with explicit attribution"}
@@ -43,6 +43,7 @@ manifest-path = "bindings/python/Cargo.toml"
 python-source = "src"
 module-name = "pybeamguard"
 features = ["pyo3/extension-module"]
+include = ["LICENSE"]
 
 [tool.uv]
 python = "3.10"

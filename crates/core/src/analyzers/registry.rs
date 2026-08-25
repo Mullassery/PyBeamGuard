@@ -4,18 +4,22 @@ use super::{
     windowing,
 };
 use crate::analyzer::Analyzer;
+use crate::rules::RulesConfig;
 
-pub fn create_analyzers() -> Vec<Box<dyn Analyzer>> {
+/// `HotKeyAnalyzer`/`StateAnalyzer`/`CostAnalyzer` are constructed with
+/// `rules`'s corresponding section instead of their old hardcoded `const`
+/// data -- see `crate::rules` for what's overridable and why.
+pub fn create_analyzers(rules: &RulesConfig) -> Vec<Box<dyn Analyzer>> {
     vec![
         // Phase 1: MVP
         Box::new(graph::GraphAnalyzer),
-        Box::new(hotkey::HotKeyAnalyzer),
+        Box::new(hotkey::HotKeyAnalyzer::new(rules.hotkey.clone())),
         Box::new(shuffle::ShuffleAnalyzer),
         // Phase 2: Streaming
         Box::new(windowing::WindowingAnalyzer),
-        Box::new(state::StateAnalyzer),
+        Box::new(state::StateAnalyzer::new(rules.state)),
         // Phase 3: Cost & Reliability
-        Box::new(cost::CostAnalyzer),
+        Box::new(cost::CostAnalyzer::new(rules.cost)),
         Box::new(reliability::ReliabilityAnalyzer),
         // Phase 4: Advanced
         Box::new(best_practices::BestPracticesAnalyzer),
@@ -25,8 +29,8 @@ pub fn create_analyzers() -> Vec<Box<dyn Analyzer>> {
     ]
 }
 
-pub fn create_analyzers_by_names(names: &[&str]) -> Vec<Box<dyn Analyzer>> {
-    let all = create_analyzers();
+pub fn create_analyzers_by_names(names: &[&str], rules: &RulesConfig) -> Vec<Box<dyn Analyzer>> {
+    let all = create_analyzers(rules);
     all.into_iter()
         .filter(|a| names.contains(&a.name()))
         .collect()
@@ -46,10 +50,10 @@ pub fn create_flink_analyzers() -> Vec<Box<dyn Analyzer>> {
 
 /// Analyzers for Apache Spark (Structured Streaming / DataFrame) pipelines,
 /// run against the `PipelineIR` produced by `SparkFrameworkParser`.
-pub fn create_spark_analyzers() -> Vec<Box<dyn Analyzer>> {
+pub fn create_spark_analyzers(rules: &RulesConfig) -> Vec<Box<dyn Analyzer>> {
     vec![
         Box::new(spark_shuffle::SparkShuffleAnalyzer),
-        Box::new(spark_join::SparkJoinAnalyzer),
+        Box::new(spark_join::SparkJoinAnalyzer::new(rules.spark_join.clone())),
         Box::new(spark_streaming::SparkStreamingAnalyzer),
     ]
 }

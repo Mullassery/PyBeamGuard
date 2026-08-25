@@ -43,6 +43,16 @@ with beam.Pipeline() as p:
     )
 """
 
+PIPELINE_WITH_REGION_KEY_SOURCE = """
+import apache_beam as beam
+
+with beam.Pipeline() as p:
+    (p
+     | 'Read' >> beam.io.ReadFromText('input.txt')
+     | 'GroupByRegion' >> beam.GroupByKey('region')
+    )
+"""
+
 
 def test_native_module_is_available():
     assert pybeamguard.core is not None, (
@@ -102,6 +112,34 @@ def test_get_text_report_and_get_json_report():
     parsed = json.loads(raw_json)
     assert isinstance(parsed, list)
     assert len(parsed) == 10
+
+
+def test_analyze_structured_with_rules_yaml_changes_output():
+    # 'region' is not a built-in high-risk pattern, so this should not be
+    # flagged by default.
+    default_results = pybeamguard.core.analyze_structured(
+        PIPELINE_WITH_REGION_KEY_SOURCE
+    )
+    default_hotkey = next(
+        r for r in default_results if r.analyzer_name == "HotKeyAnalyzer"
+    )
+    assert not any(f.id == "HOTKEY_HIGH_RISK" for f in default_hotkey.findings)
+
+    rules_yaml = 'hotkey:\n  high_risk_patterns: ["region"]\n'
+    custom_results = pybeamguard.core.analyze_structured(
+        PIPELINE_WITH_REGION_KEY_SOURCE, None, rules_yaml
+    )
+    custom_hotkey = next(
+        r for r in custom_results if r.analyzer_name == "HotKeyAnalyzer"
+    )
+    assert any(f.id == "HOTKEY_HIGH_RISK" for f in custom_hotkey.findings)
+
+
+def test_analyze_structured_rejects_malformed_rules_yaml():
+    with pytest.raises(Exception):
+        pybeamguard.core.analyze_structured(
+            SIMPLE_PIPELINE_SOURCE, None, "not: valid: yaml: ["
+        )
 
 
 def test_example_pipeline_file_analyzes_successfully():
@@ -190,6 +228,74 @@ class TestCliMain:
         captured = capsys.readouterr()
         assert exit_code == 1
         assert "Error parsing data profile JSON" in captured.err
+
+    def test_analyze_with_rules_yaml_changes_output(self, capsys, tmp_path):
+        from pybeamguard.cli import main
+
+        pipeline_file = tmp_path / "region_pipeline.py"
+        pipeline_file.write_text(PIPELINE_WITH_REGION_KEY_SOURCE)
+
+        exit_code = main(["analyze", str(pipeline_file), "--format", "json"])
+        captured = capsys.readouterr()
+        assert exit_code == 0
+        default_findings = {
+            f["id"] for r in json.loads(captured.out) for f in r["findings"]
+        }
+        assert "HOTKEY_HIGH_RISK" not in default_findings
+
+        rules_file = tmp_path / "rules.yaml"
+        rules_file.write_text('hotkey:\n  high_risk_patterns: ["region"]\n')
+
+        exit_code = main(
+            [
+                "analyze",
+                str(pipeline_file),
+                "--format",
+                "json",
+                "--rules",
+                str(rules_file),
+            ]
+        )
+        captured = capsys.readouterr()
+        assert exit_code == 0
+        custom_findings = {
+            f["id"] for r in json.loads(captured.out) for f in r["findings"]
+        }
+        assert "HOTKEY_HIGH_RISK" in custom_findings
+
+    def test_analyze_rules_flag_ignored_with_flink_framework(self, capsys, tmp_path):
+        from pybeamguard.cli import main
+
+        rules_file = tmp_path / "rules.yaml"
+        rules_file.write_text('hotkey:\n  high_risk_patterns: ["region"]\n')
+
+        exit_code = main(
+            [
+                "analyze",
+                EXAMPLE_PIPELINE,
+                "--framework",
+                "flink",
+                "--rules",
+                str(rules_file),
+            ]
+        )
+        captured = capsys.readouterr()
+        assert "--rules has no effect with --framework flink" in captured.err
+
+    def test_analyze_missing_rules_file_is_clean_error(self, capsys, tmp_path):
+        from pybeamguard.cli import main
+
+        exit_code = main(
+            [
+                "analyze",
+                EXAMPLE_PIPELINE,
+                "--rules",
+                "/nonexistent/rules.yaml",
+            ]
+        )
+        captured = capsys.readouterr()
+        assert exit_code == 1
+        assert "Error reading rules file" in captured.err
 
     def test_analyze_empty_pipeline_file_is_clean_error(self, capsys, tmp_path):
         from pybeamguard.cli import main

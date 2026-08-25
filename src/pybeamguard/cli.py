@@ -74,6 +74,16 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Path to a data profile JSON file (optional).",
     )
     analyze_parser.add_argument(
+        "--rules",
+        dest="rules",
+        default=None,
+        metavar="FILE",
+        help=(
+            "Path to a YAML rules file overriding analyzer thresholds/"
+            "patterns (optional; beam and spark only)."
+        ),
+    )
+    analyze_parser.add_argument(
         "--fail-on",
         dest="fail_on",
         default=None,
@@ -123,6 +133,22 @@ def _cmd_analyze(args: argparse.Namespace) -> int:
             print(f"Error parsing data profile JSON: {e}", file=sys.stderr)
             return 1
 
+    rules_yaml: Optional[str] = None
+    if args.rules:
+        if args.framework == "flink":
+            print(
+                "Warning: --rules has no effect with --framework flink "
+                "(Flink's analyzer suite has no rule-driven thresholds).",
+                file=sys.stderr,
+            )
+        else:
+            try:
+                with open(args.rules, "r", encoding="utf-8") as f:
+                    rules_yaml = f.read()
+            except OSError as e:
+                print(f"Error reading rules file '{args.rules}': {e}", file=sys.stderr)
+                return 1
+
     json_report, text_report, structured = {
         "beam": (native.get_json_report, native.get_text_report, native.analyze_structured),
         "flink": (
@@ -137,11 +163,15 @@ def _cmd_analyze(args: argparse.Namespace) -> int:
         ),
     }[args.framework]
 
+    # Flink's report/structured functions don't accept a rules_yaml
+    # parameter (no rule-driven analyzers), so it's only passed for beam/spark.
+    extra_args = () if args.framework == "flink" else (rules_yaml,)
+
     try:
         if args.format == "json":
-            output = json_report(code, data_profile_json)
+            output = json_report(code, data_profile_json, *extra_args)
         else:
-            output = text_report(code, data_profile_json)
+            output = text_report(code, data_profile_json, *extra_args)
     except Exception as e:  # native bindings raise plain Python exceptions
         print(f"Analysis failed: {e}", file=sys.stderr)
         return 1
@@ -150,7 +180,7 @@ def _cmd_analyze(args: argparse.Namespace) -> int:
 
     if args.fail_on:
         try:
-            results = structured(code, data_profile_json)
+            results = structured(code, data_profile_json, *extra_args)
         except Exception as e:
             print(f"Analysis failed: {e}", file=sys.stderr)
             return 1

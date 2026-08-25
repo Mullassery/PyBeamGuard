@@ -1,24 +1,26 @@
 use crate::analyzer::*;
 use crate::ir::*;
+use crate::rules::HotKeyRules;
 use std::collections::HashMap;
 
-pub struct HotKeyAnalyzer;
+/// Risk-pattern keyword lists and cardinality thresholds are injected via
+/// `rules` (defaulting to the values that used to be hardcoded `const`s --
+/// see `crate::rules::HotKeyRules`), not compiled in.
+pub struct HotKeyAnalyzer {
+    rules: HotKeyRules,
+}
 
-// Risk keywords that suggest high-cardinality key domains
-const HIGH_RISK_PATTERNS: &[&str] = &[
-    "customer",
-    "tenant",
-    "org",
-    "account",
-    "user",
-    "organization",
-    "client",
-    "partner",
-    "company",
-];
+impl HotKeyAnalyzer {
+    pub fn new(rules: HotKeyRules) -> Self {
+        HotKeyAnalyzer { rules }
+    }
+}
 
-// Medium-risk patterns
-const MEDIUM_RISK_PATTERNS: &[&str] = &["hour", "day", "date", "month", "timestamp"];
+impl Default for HotKeyAnalyzer {
+    fn default() -> Self {
+        HotKeyAnalyzer::new(HotKeyRules::default())
+    }
+}
 
 impl Analyzer for HotKeyAnalyzer {
     fn name(&self) -> &str {
@@ -104,7 +106,7 @@ impl HotKeyAnalyzer {
         // sharing all traffic is close to a worst-case hot-key scenario
         // regardless of what the key expression looks like syntactically.
         if let Some(cardinality) = measured_cardinality {
-            if cardinality > 0 && cardinality < 1_000 {
+            if cardinality > 0 && (cardinality as u64) < self.rules.low_cardinality_threshold {
                 return Finding {
                     id: "HOTKEY_LOW_CARDINALITY_MEASURED".to_string(),
                     severity: RiskSeverity::Critical,
@@ -136,12 +138,13 @@ impl HotKeyAnalyzer {
         }
 
         // Check for high-risk patterns (customer_id, tenant_id, etc.)
-        for pattern in HIGH_RISK_PATTERNS {
-            if key_str.to_lowercase().contains(pattern) {
+        for pattern in &self.rules.high_risk_patterns {
+            if key_str.to_lowercase().contains(pattern.as_str()) {
                 // A large measured cardinality means traffic is already
                 // spread over many keys, which reduces (without eliminating)
                 // the risk implied by the name pattern alone.
-                let high_cardinality_measured = measured_cardinality.is_some_and(|c| c >= 100_000);
+                let high_cardinality_measured = measured_cardinality
+                    .is_some_and(|c| (c as u64) >= self.rules.high_cardinality_downgrade_threshold);
                 let severity = if high_cardinality_measured {
                     RiskSeverity::Medium
                 } else {
@@ -182,8 +185,8 @@ impl HotKeyAnalyzer {
         }
 
         // Check for medium-risk patterns (timestamp-based keys)
-        for pattern in MEDIUM_RISK_PATTERNS {
-            if key_str.to_lowercase().contains(pattern) {
+        for pattern in &self.rules.medium_risk_patterns {
+            if key_str.to_lowercase().contains(pattern.as_str()) {
                 return Finding {
                     id: "HOTKEY_MEDIUM_RISK".to_string(),
                     severity: RiskSeverity::Medium,
@@ -228,21 +231,21 @@ mod tests {
 
     #[test]
     fn test_high_risk_customer_key() {
-        let analyzer = HotKeyAnalyzer;
+        let analyzer = HotKeyAnalyzer::default();
         let risk = analyzer.assess_key_risk(&Some("customer_id".to_string()), None);
         assert_eq!(risk.severity, RiskSeverity::High);
     }
 
     #[test]
     fn test_medium_risk_timestamp_key() {
-        let analyzer = HotKeyAnalyzer;
+        let analyzer = HotKeyAnalyzer::default();
         let risk = analyzer.assess_key_risk(&Some("hour".to_string()), None);
         assert_eq!(risk.severity, RiskSeverity::Medium);
     }
 
     #[test]
     fn test_data_profile_low_cardinality_escalates_to_critical() {
-        let analyzer = HotKeyAnalyzer;
+        let analyzer = HotKeyAnalyzer::default();
         let profile = DataProfile {
             estimated_throughput_per_sec: None,
             average_element_size_bytes: None,
@@ -258,7 +261,7 @@ mod tests {
 
     #[test]
     fn test_data_profile_high_cardinality_downgrades_high_risk_pattern() {
-        let analyzer = HotKeyAnalyzer;
+        let analyzer = HotKeyAnalyzer::default();
         let profile = DataProfile {
             estimated_throughput_per_sec: None,
             average_element_size_bytes: None,
@@ -307,6 +310,6 @@ mod tests {
     }
 
     fn analyzer_analyze_ok(ctx: &AnalysisContext) -> AnalysisResult {
-        HotKeyAnalyzer.analyze(ctx).unwrap()
+        HotKeyAnalyzer::default().analyze(ctx).unwrap()
     }
 }
