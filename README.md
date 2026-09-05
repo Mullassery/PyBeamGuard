@@ -485,16 +485,7 @@ doesn't have access to.
 
 ## License
 
-**Proprietary Software** — FREE forever, no licensing tiers, no paywalls.
-
-See [LICENSE](LICENSE) file for complete terms. All features available to all users.
-
-**Use Cases:**
-- Commercial use
-- Internal tools
-- Research
-- Education
-- Open source projects
+This project is licensed under the [Apache License 2.0](LICENSE).
 
 ---
 
