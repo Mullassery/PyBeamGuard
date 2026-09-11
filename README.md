@@ -9,7 +9,7 @@ Analyze Beam pipelines pre-deployment to identify bottlenecks, reliability risks
 
 [![CI](https://github.com/Mullassery/PyBeamGuard/actions/workflows/ci.yml/badge.svg)](https://github.com/Mullassery/PyBeamGuard/actions/workflows/ci.yml)
 [![Version](https://img.shields.io/badge/version-1.1.2-blue)](https://github.com/Mullassery/PyBeamGuard/releases)
-[![License](https://img.shields.io/badge/license-Proprietary-blue)](LICENSE)
+[![License](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE)
 [![PyPI](https://img.shields.io/badge/PyPI-pybeamguard-blue)](https://pypi.org/project/pybeamguard/)
 
 ---
@@ -88,7 +88,7 @@ Estimated Cost: $2,300/month → Optimized: $1,350/month (41% savings)
 
 ## Features
 
-### All Features FREE - Proprietary Software
+### All Features FREE - Open Source (Apache 2.0)
 
 ### 10 Intelligent Analyzers
 
@@ -502,7 +502,7 @@ This project is licensed under the [Apache License 2.0](LICENSE).
 ## FAQ
 
 **Q: How much does PyBeamGuard cost?**  
-A: **FREE.** PyBeamGuard is proprietary software with no licensing fees, no tiers, no paywalls. All features available to everyone.
+A: **FREE.** PyBeamGuard is open-source software (Apache License 2.0) with no licensing fees, no tiers, no paywalls. All features available to everyone.
 
 **Q: Does PyBeamGuard require Python?**  
 A: Depends how you install it. The standalone Rust binary from GitHub
