@@ -282,7 +282,7 @@ cargo build --release --bin pybeamguard
 
 ## Documentation
 
-- **[Build Summary](BUILD_SUMMARY.md)** - Phase implementation details and history
+- **[Build Summary](docs/archive/BUILD_SUMMARY.md) (historical)** - Phase implementation details and history
 
 ---
 
