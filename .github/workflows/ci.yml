@@ -117,3 +117,37 @@ jobs:
 
       - name: Run Python test suite
         run: pytest tests/ -v
+
+  security-audit:
+    name: Security audit (cargo-audit)
+    runs-on: ubuntu-latest
+    # Advisory-only: does not gate merges. RustSec advisories get published
+    # for crates already in the dependency tree faster than this project can
+    # always react, so this job is informational (continue-on-error) rather
+    # than a hard CI gate. See ROADMAP_HONEST.md for the tracked gap this
+    # closes (no automated dependency vulnerability scanning existed before).
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install cargo-audit
+        run: cargo install cargo-audit --locked
+      - name: Run cargo audit
+        run: cargo audit
+        continue-on-error: true
+
+  actionlint:
+    name: Lint workflow YAML
+    runs-on: ubuntu-latest
+    # Catches the class of bug found in a past pass of this repo: stale
+    # action versions (e.g. actions/upload-artifact@v3, since retired by
+    # GitHub), shellcheck issues in `run:` blocks, and other workflow-file
+    # mistakes that a normal Rust/Python CI run can't detect because they
+    # only affect a *different* workflow (release.yml only runs on tag
+    # push / manual dispatch, so its own bugs go unnoticed for a long time
+    # otherwise).
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download actionlint
+        run: bash <(curl -fsSL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash)
+      - name: Run actionlint
+        run: ./actionlint -color

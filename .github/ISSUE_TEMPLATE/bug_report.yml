@@ -1,0 +1,88 @@
+name: Bug Report
+description: Report a problem with PyBeamGuard
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug. Please fill in as much
+        detail as you can — this is a small project maintained in spare
+        time, so a reproducible example saves a lot of back-and-forth.
+
+  - type: input
+    id: version
+    attributes:
+      label: PyBeamGuard version
+      description: Output of `pybeamguard --version`
+      placeholder: "pybeamguard 1.2.0"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: install-method
+    attributes:
+      label: Installation method
+      options:
+        - "pip / uv (PyPI wheel)"
+        - "GitHub Releases standalone binary"
+        - "Built from source (maturin develop / cargo build)"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: framework
+    attributes:
+      label: Framework being analyzed
+      options:
+        - "Apache Beam"
+        - "Apache Flink"
+        - "Apache Spark"
+        - "N/A (not analysis-related)"
+    validations:
+      required: true
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: A clear description of the bug, including the exact command you ran.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect to happen?
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Minimal reproduction
+      description: >
+        A pipeline source snippet (or attached file) that triggers the bug,
+        plus the exact CLI invocation. Findings are heuristic/regex-based,
+        so exact source text often matters.
+      render: python
+    validations:
+      required: false
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, Python version (if using the PyPI package), Rust version (if built from source).
+      placeholder: |
+        OS: macOS 14.5 (arm64)
+        Python: 3.11.9
+    validations:
+      required: true
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional context
+      description: Logs, stack traces, or anything else relevant.
+    validations:
+      required: false

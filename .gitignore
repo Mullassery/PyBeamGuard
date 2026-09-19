@@ -1,9 +1,12 @@
 # Rust
 /target/
 **/*.rs.bk
-Cargo.lock
 *.pdb
 *.rlib
+# Cargo.lock is intentionally committed (tracked in git) -- this workspace
+# produces binaries (the `pybeamguard` CLI and the PyO3 extension module),
+# and Cargo.lock should be checked in for binary crates per Rust convention
+# for reproducible builds. Do not re-add an ignore rule for it here.
 
 # Python
 __pycache__/

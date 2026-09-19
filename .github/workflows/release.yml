@@ -25,7 +25,7 @@ jobs:
             target: x86_64-pc-windows-msvc
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
@@ -53,40 +53,48 @@ jobs:
           elif [ "${{ runner.os }}" = "Linux" ]; then
             cp target/release/pybeamguard ${{ matrix.artifact }}
           else
-            copy target\release\pybeamguard.exe "${{ matrix.artifact }}"
+            cp target/release/pybeamguard.exe "${{ matrix.artifact }}"
           fi
           chmod +x "${{ matrix.artifact }}" || true
 
       - name: Create Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           files: |
             ${{ matrix.artifact }}
             Cargo.lock
             README.md
-            BUILD_SUMMARY.md
+            docs/archive/BUILD_SUMMARY.md
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload to releases
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
-          name: binaries
+          name: ${{ matrix.artifact }}
           path: ${{ matrix.artifact }}
 
   test:
     name: Test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-      - run: cargo test --release
+      # Scoped to -p pybeamguard-core, not --release alone: a bare
+      # `cargo test` (or `cargo build`) across the whole workspace tries to
+      # link bindings/python's PyO3 `extension-module` cdylib outside of
+      # maturin, which fails at the link step ("ld: symbol(s) not found")
+      # on macOS and is untested/unsafe to assume works on Linux either.
+      # See the identical, already-diagnosed issue and fix in ci.yml.
+      # bindings/python has no #[test]s of its own (0 tests), so this loses
+      # no coverage.
+      - run: cargo test --release -p pybeamguard-core
 
   lint:
     name: Lint & Format
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-      - run: cargo fmt -- --check
-      - run: cargo clippy -- -D warnings
+      - run: cargo fmt --all -- --check
+      - run: cargo clippy --workspace -- -D warnings

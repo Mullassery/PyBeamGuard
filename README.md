@@ -8,7 +8,7 @@ Analyze Beam pipelines pre-deployment to identify bottlenecks, reliability risks
 > pipelines.
 
 [![CI](https://github.com/Mullassery/PyBeamGuard/actions/workflows/ci.yml/badge.svg)](https://github.com/Mullassery/PyBeamGuard/actions/workflows/ci.yml)
-[![Version](https://img.shields.io/badge/version-1.1.2-blue)](https://github.com/Mullassery/PyBeamGuard/releases)
+[![Version](https://img.shields.io/badge/version-1.2.0-blue)](https://github.com/Mullassery/PyBeamGuard/releases)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE)
 [![PyPI](https://img.shields.io/badge/PyPI-pybeamguard-blue)](https://pypi.org/project/pybeamguard/)
 
@@ -282,6 +282,10 @@ cargo build --release --bin pybeamguard
 
 ## Documentation
 
+- **[ROADMAP_HONEST.md](ROADMAP_HONEST.md)** - blunt, verified status: what's tested, what's not built, known CI gaps, and technical debt with file:line specifics
+- **[CONTRIBUTING.md](CONTRIBUTING.md)** - project layout, local setup, and the exact commands CI runs
+- **[SECURITY.md](SECURITY.md)** - how to report a vulnerability
+- **[CHANGELOG.md](CHANGELOG.md)** - notable changes (Keep a Changelog format)
 - **[Build Summary](docs/archive/BUILD_SUMMARY.md) (historical)** - Phase implementation details and history
 
 ---
@@ -379,7 +383,8 @@ not a pure-Python implementation.
 
 ## Contributing
 
-Contributions welcome!
+Contributions welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for project
+layout, local setup, and the exact commands CI runs. Quick version:
 
 ```bash
 # Build the Rust core + CLI binary
