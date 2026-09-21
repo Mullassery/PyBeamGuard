@@ -26,11 +26,16 @@ this machine (macOS) with `ld: symbol(s) not found for architecture arm64`
 — this is a real, reproduced constraint, not a hypothetical one, and it's
 why `ci.yml`/`release.yml` scope Rust commands to `-p pybeamguard-core`.
 
-`cargo audit` could not be run to completion in this sandboxed environment
-— it needs to fetch the RustSec advisory database over git/https and this
-environment has no outbound network access. The `security-audit` CI job
-added in this pass has **not** been confirmed to run green on real GitHub
-Actions; verify it after the next push.
+`cargo audit` could not be run to completion in the sandboxed environment
+used for the 2026-09-19 pass — it needs to fetch the RustSec advisory
+database over git/https and that environment had no outbound network
+access. **Update (2026-09-21 quick-fix pass): re-run with real network
+access.** `cargo audit` completed successfully — 77 crate dependencies
+scanned, 0 vulnerabilities found, exit code 0. The `security-audit` CI
+job's `cargo audit` step has been promoted from `continue-on-error: true`
+to a hard gate in `.github/workflows/ci.yml` accordingly. It still has
+not been confirmed to run green on real GitHub Actions (only locally);
+verify that after the next push.
 
 ---
 
@@ -55,10 +60,12 @@ Actions; verify it after the next push.
 
 ## Bucket 2: Built but NOT independently verified in this pass
 
-- The new `security-audit` cargo-audit CI job (`.github/workflows/ci.yml`)
-  — added this pass, config is syntactically valid (actionlint-clean) but
-  never actually executed against a live network, so whether it correctly
-  reports/parses is unconfirmed.
+- The `security-audit` cargo-audit CI job (`.github/workflows/ci.yml`) —
+  **update (2026-09-21): now run locally against a live network** (77
+  crates scanned, 0 vulnerabilities, exit 0), and the job promoted from
+  `continue-on-error: true` to a hard gate. Still unconfirmed on real
+  GitHub Actions specifically (installer/cache behavior on their runners
+  could differ) — verify after the next push.
 - The new `actionlint` CI job — same caveat; the local `actionlint` binary
   run during this pass was manually installed via Homebrew, not the
   `curl`-based bootstrap the workflow uses.
@@ -173,14 +180,14 @@ awareness):**
   pipeline source. Low risk as-is; would still read more clearly as
   `.expect("valid static regex")` to make the invariant explicit for
   future editors.
-- `crates/core/src/analyzers/hotkey.rs:165`: `measured_cardinality.unwrap()`
-  depends on the invariant that `high_cardinality_measured` (checked a few
-  lines earlier) implies `measured_cardinality.is_some()`. Currently
-  correct by inspection and covered indirectly by passing tests, but
-  not enforced by the type system — a future refactor of the surrounding
-  branch could silently introduce a panic. One-line fix
-  (`if let Some(c) = measured_cardinality { ... }`), left undone here per
-  the "document, don't casually touch analyzer logic" scope of this pass.
+- ~~`crates/core/src/analyzers/hotkey.rs:165`: `measured_cardinality.unwrap()`~~
+  **Fixed (2026-09-21 quick-fix pass).** Replaced with an explicit
+  `if let Some(cardinality) = measured_cardinality.filter(|_|
+  high_cardinality_measured)` match, so the panic no longer depends on
+  an invariant between two separate branches. Verified: `cargo test -p
+  pybeamguard-core` (78 unit + 13 integration, all passing), `cargo
+  clippy --workspace -- -D warnings` (0 warnings), `cargo fmt --all --
+  --check` (clean), `pytest tests/` (23 passed).
 - `bindings/python/src/lib.rs` is 1,896 lines — by far the largest file
   in the repo (next largest: `crates/core/src/parser.rs` at 669 lines).
   It has **zero** `.unwrap()`/`.expect()`/`panic!` calls (clean

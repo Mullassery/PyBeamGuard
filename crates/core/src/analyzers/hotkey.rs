@@ -151,25 +151,33 @@ impl HotKeyAnalyzer {
                     RiskSeverity::High
                 };
 
+                // Only reachable when `high_cardinality_measured` is true, which
+                // itself requires `measured_cardinality.is_some()` -- but we
+                // avoid relying on that invariant via `.unwrap()` and instead
+                // pattern-match, so a future refactor of the branch above can't
+                // silently turn this into a panic.
+                let description = if let Some(cardinality) =
+                    measured_cardinality.filter(|_| high_cardinality_measured)
+                {
+                    format!(
+                        "Aggregating by '{}' matches a high-risk key pattern, but the supplied \
+                         data profile measured a large key cardinality ({}), which reduces the \
+                         likelihood of a small number of keys dominating traffic.",
+                        key_str, cardinality
+                    )
+                } else {
+                    format!(
+                        "Aggregating by '{}' likely creates key skew. This key domain has high cardinality variance (e.g., some customers generate 100x more data than others), creating worker imbalance.",
+                        key_str
+                    )
+                };
+
                 return Finding {
                     id: "HOTKEY_HIGH_RISK".to_string(),
                     severity,
                     finding_type: FindingType::PerformanceRisk,
                     title: format!("High hot-key probability on '{}'", key_str),
-                    description: if high_cardinality_measured {
-                        format!(
-                            "Aggregating by '{}' matches a high-risk key pattern, but the supplied \
-                             data profile measured a large key cardinality ({}), which reduces the \
-                             likelihood of a small number of keys dominating traffic.",
-                            key_str,
-                            measured_cardinality.unwrap()
-                        )
-                    } else {
-                        format!(
-                            "Aggregating by '{}' likely creates key skew. This key domain has high cardinality variance (e.g., some customers generate 100x more data than others), creating worker imbalance.",
-                            key_str
-                        )
-                    },
+                    description,
                     affected_nodes: vec![],
                     recommendation: Some(
                         "Apply key sharding strategy: append a UUID or hash to distribute load. Example: sharded_key = (customer_id, hash(data) % num_shards)".to_string()

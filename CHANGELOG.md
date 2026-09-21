@@ -53,3 +53,22 @@ file was created is **1.2.0** (published on PyPI and tagged up to
   ineffective (the file is, correctly, tracked in git — this workspace
   produces binaries, so Cargo.lock should be committed) but misleading
   to read.
+- `crates/core/src/analyzers/hotkey.rs:165`: replaced a
+  `measured_cardinality.unwrap()` inside the `HOTKEY_HIGH_RISK` finding
+  description with an explicit `if let Some(cardinality) =
+  measured_cardinality.filter(|_| high_cardinality_measured)` match.
+  Behavior is unchanged (still only formats the cardinality when the
+  same condition that used to gate the unwrap holds), but it no longer
+  relies on an invariant between two separate branches to avoid a
+  panic — a future refactor of the surrounding code can't silently
+  reintroduce one. Verified via `cargo test -p pybeamguard-core` (78
+  unit + 13 integration tests, all passing) and `cargo clippy
+  --workspace -- -D warnings` (0 warnings).
+
+### Changed
+- `.github/workflows/ci.yml`: the `security-audit` job's `cargo audit`
+  step was run for real against the live RustSec advisory database in
+  this pass (network access available this time) — 77 crate
+  dependencies scanned, 0 vulnerabilities found. Promoted the job from
+  `continue-on-error: true` to a hard gate now that it's confirmed to
+  pass rather than being unverified (see `ROADMAP_HONEST.md`).

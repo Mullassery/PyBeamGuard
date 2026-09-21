@@ -121,11 +121,12 @@ jobs:
   security-audit:
     name: Security audit (cargo-audit)
     runs-on: ubuntu-latest
-    # Advisory-only: does not gate merges. RustSec advisories get published
-    # for crates already in the dependency tree faster than this project can
-    # always react, so this job is informational (continue-on-error) rather
-    # than a hard CI gate. See ROADMAP_HONEST.md for the tracked gap this
-    # closes (no automated dependency vulnerability scanning existed before).
+    # Verified green in this pass (2026-09-21): `cargo audit` ran for real
+    # against the live RustSec advisory database (77 crates scanned, 0
+    # vulnerabilities). Promoted from continue-on-error to a hard gate now
+    # that it's confirmed to actually pass rather than being unverified.
+    # See ROADMAP_HONEST.md for the tracked gap this closes (no automated
+    # dependency vulnerability scanning existed before).
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -133,7 +134,6 @@ jobs:
         run: cargo install cargo-audit --locked
       - name: Run cargo audit
         run: cargo audit
-        continue-on-error: true
 
   actionlint:
     name: Lint workflow YAML
