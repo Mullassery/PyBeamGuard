@@ -8,7 +8,7 @@ Analyze Beam pipelines pre-deployment to identify bottlenecks, reliability risks
 > pipelines.
 
 [![CI](https://github.com/Mullassery/PyBeamGuard/actions/workflows/ci.yml/badge.svg)](https://github.com/Mullassery/PyBeamGuard/actions/workflows/ci.yml)
-[![Version](https://img.shields.io/badge/version-1.2.0-blue)](https://github.com/Mullassery/PyBeamGuard/releases)
+[![Version](https://img.shields.io/badge/version-1.2.1-blue)](https://github.com/Mullassery/PyBeamGuard/releases)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE)
 [![PyPI](https://img.shields.io/badge/PyPI-pybeamguard-blue)](https://pypi.org/project/pybeamguard/)
 

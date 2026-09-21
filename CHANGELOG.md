@@ -15,6 +15,8 @@ file was created is **1.2.0** (published on PyPI and tagged up to
 
 ## [Unreleased]
 
+## [1.2.1] - 2026-09-22
+
 ### Added
 - `SECURITY.md`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, this
   `CHANGELOG.md`, and `ROADMAP_HONEST.md`.

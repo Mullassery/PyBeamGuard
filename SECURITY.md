@@ -3,7 +3,7 @@
 ## Supported versions
 
 PyBeamGuard is a single-maintainer, pre-1.0-maturity-in-spirit project
-(currently at 1.2.0). There is no formal LTS or backport policy — only the
+(currently at 1.2.1). There is no formal LTS or backport policy — only the
 latest released version on PyPI / GitHub Releases receives fixes.
 
 | Version | Supported |
