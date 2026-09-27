@@ -11,7 +11,8 @@
 
 use pybeamguard_core::{
     analyze_flink_pipeline, analyze_pipeline, analyze_pipeline_with_rules, analyze_spark_pipeline,
-    analyze_spark_pipeline_with_rules, DataProfile, RulesConfig,
+    analyze_spark_pipeline_with_rules, reporting::Reporter, reporting::TextReporter, DataProfile,
+    RulesConfig,
 };
 
 const REALISTIC_STREAMING_PIPELINE: &str = r#"
@@ -390,5 +391,75 @@ fn custom_spark_join_rules_yaml_changes_spark_analysis_end_to_end() {
     assert!(
         custom_findings.contains(&"SPARK_JOIN_HIGH_RISK_KEY"),
         "with 'region' added as a high-risk pattern via YAML rules, this join key should now be flagged"
+    );
+}
+
+const BEAM_PIPELINE_WITH_GLOBAL_WINDOW_NO_TRIGGER: &str = r#"
+import apache_beam as beam
+from apache_beam.transforms.window import GlobalWindows
+
+with beam.Pipeline() as p:
+    result = (
+        p
+        | 'Read' >> beam.io.ReadFromPubSub(topic='projects/x/topics/events')
+        | 'Parse' >> beam.ParDo(ParseFn())
+        | 'Window' >> beam.WindowInto(GlobalWindows())
+        | 'Group' >> beam.GroupByKey()
+        | 'Write' >> beam.io.WriteToBigQuery('dataset.table')
+    )
+"#;
+
+#[test]
+fn beam_global_windows_without_trigger_flagged_end_to_end() {
+    // Regression test for a parser gap: `windowing_re` used to match only
+    // "Windowing"/"FixedWindows"/"SlidingWindows"/"SessionWindows", never
+    // "WindowInto" or "GlobalWindows" -- so a real
+    // `beam.WindowInto(GlobalWindows())` line (the exact case
+    // WINDOWING_GLOBAL_NO_TRIGGER exists to catch) produced no Windowing
+    // node at all, and the finding could never fire through the real
+    // parser/analyze path, only via hand-built IR in unit tests.
+    let results = analyze_pipeline(BEAM_PIPELINE_WITH_GLOBAL_WINDOW_NO_TRIGGER, None)
+        .expect("pipeline with GlobalWindows() should analyze successfully");
+    let finding_ids: Vec<&str> = results
+        .iter()
+        .flat_map(|r| r.findings.iter().map(|f| f.id.as_str()))
+        .collect();
+    assert!(
+        finding_ids.contains(&"WINDOWING_GLOBAL_NO_TRIGGER"),
+        "a GlobalWindows() call with no trigger should be flagged end-to-end; got findings: {finding_ids:?}"
+    );
+}
+
+#[test]
+fn text_report_overall_risk_score_label_is_not_ambiguous() {
+    // Regression test for a label collision: the top-of-report aggregate
+    // ("Overall Risk Score: N/100", higher = riskier, computed from summed
+    // finding severities) and SynthesisEngine's per-analyzer summary line
+    // used to share the exact literal phrase "Overall Risk Score N/100"
+    // while meaning the opposite thing (higher = healthier/production-ready
+    // there). Both lines land in the same `pybeamguard analyze` text
+    // report, so a reader could easily compare the two numbers as if they
+    // were the same metric. SynthesisEngine's summary must not repeat that
+    // exact phrase.
+    let results = analyze_pipeline(REALISTIC_STREAMING_PIPELINE, None)
+        .expect("realistic streaming pipeline should analyze successfully");
+
+    let synthesis_summary = results
+        .iter()
+        .find(|r| r.analyzer_name == "SynthesisEngine")
+        .map(|r| r.summary.as_str())
+        .expect("SynthesisEngine should produce a result");
+    assert!(
+        !synthesis_summary.contains("Overall Risk Score"),
+        "SynthesisEngine's summary must not reuse the top-line report's \"Overall Risk Score\" \
+         phrase with an inverted scale; got: {synthesis_summary:?}"
+    );
+
+    let report = TextReporter.format(&results);
+    let occurrences = report.matches("Overall Risk Score").count();
+    assert_eq!(
+        occurrences, 1,
+        "\"Overall Risk Score\" should appear exactly once in the text report (the top-line \
+         aggregate); got {occurrences} occurrences in:\n{report}"
     );
 }

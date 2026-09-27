@@ -37,6 +37,79 @@ to a hard gate in `.github/workflows/ci.yml` accordingly. It still has
 not been confirmed to run green on real GitHub Actions (only locally);
 verify that after the next push.
 
+## Bugs found and fixed in a deep-review pass (2026-09-27)
+
+This pass specifically hunted for real logic bugs that survive a linter/CI
+pass -- silent false negatives, off-by-ones, stale/inconsistent values --
+by reading analyzer/parser logic line-by-line and reproducing each
+suspicion with a failing test before touching code. Three real,
+independently-reproduced bugs were found and fixed; each has a regression
+test that fails on the pre-fix code and passes after. `cargo test -p
+pybeamguard-core` went from 78 unit + 13 integration to 82 unit + 15
+integration (all passing); `cargo fmt --all -- --check` and `cargo clippy
+--workspace -- -D warnings` stayed clean; `pytest tests/` stayed at 23
+passed after rebuilding the wheel with `maturin develop --release`.
+
+1. **`crates/core/src/parser.rs`: `GlobalWindows()` was never detected as a
+   windowing operation at all.** `windowing_re` matched only
+   `Windowing|FixedWindows|SlidingWindows|SessionWindows`. A real
+   `beam.WindowInto(GlobalWindows())` line contains none of those literal
+   substrings (`WindowInto` is not `Windowing`), so no `Windowing` IR node
+   was ever created for it -- which silently disabled
+   `WINDOWING_GLOBAL_NO_TRIGGER` (a High-severity finding whose entire
+   purpose is to catch exactly this case: a global window with no trigger
+   that will never emit in an unbounded stream) for every pipeline that
+   actually uses `GlobalWindows()`. It only ever fired in hand-built-IR
+   unit tests that bypassed the real parser. Verified with a failing
+   end-to-end test (`beam_global_windows_without_trigger_flagged_end_to_end`
+   in `crates/core/tests/integration.rs`) before the fix, passing after.
+   Fixed by adding `WindowInto` to `windowing_re` so any `WindowInto(...)`
+   call is captured regardless of which window class is used.
+2. **`crates/core/src/analyzers/reliability.rs`: `RELIABILITY_NO_ERROR_HANDLING`
+   was gated on a pipeline-wide flag instead of the specific node's own
+   state.** The per-node check for "does this parsing/decoding ParDo lack
+   error handling" used `!has_error_handling && !_has_side_outputs`, where
+   both variables were "does *any* ParDo anywhere in the whole pipeline
+   have side outputs" (the same predicate computed twice under different
+   names) -- not whether *this* ParDo has one. A parsing ParDo with zero
+   error handling of its own was silently never flagged as long as some
+   unrelated ParDo elsewhere in the pipeline happened to have side outputs
+   for its own purposes -- a real false negative in exactly the kind of
+   "will malformed input silently fail" check this analyzer exists for.
+   Verified with a failing test
+   (`test_unrelated_pardo_side_output_does_not_mask_parse_finding`) before
+   the fix, passing after. Fixed by matching the node's own
+   `has_side_outputs` field in the per-node loop instead of the pipeline-
+   wide aggregate (which is kept, under a clearer name, as the separate
+   `has_error_handling`/`has_side_outputs` pipeline-level metrics feeding
+   the overall reliability score -- that usage was already correct).
+3. **`crates/core/src/analyzers/synthesis.rs` / `text_reporter.rs`: two
+   differently-scaled metrics shared the literal display phrase "Overall
+   Risk Score" in the same report.** `TextReporter` prints a top-line
+   `Overall Risk Score: N/100` computed from summed finding severities
+   (higher = riskier). `SynthesisEngine`'s own summary line printed
+   `Overall Risk Score N/100 (EXCELLENT - Production Ready / ... / CRITICAL
+   - Do Not Deploy)` computed from `overall_risk_score`, which is the
+   *opposite* polarity (higher = healthier/more production-ready). Running
+   `pybeamguard analyze` produces both lines in the same text report, so a
+   reader could reasonably compare "Overall Risk Score: 0/100" at the top
+   against "Overall Risk Score 82/100 (EXCELLENT)" further down as if they
+   were the same number moving in the same direction, when they are
+   opposite scales that happen to share a name -- confirmed concretely by
+   running the CLI on `examples/pipeline_simple.py`, which prints exactly
+   this pair. Fixed by renaming only the human-readable string in
+   `SynthesisEngine`'s summary to "Pipeline Health Score" (the underlying
+   `overall_risk_score` field/metric name is unchanged, since it's part of
+   the JSON output and Python bindings' public surface and renaming it
+   would be a breaking API change, not a "trivial and obviously correct"
+   fix). Regression test:
+   `text_report_overall_risk_score_label_is_not_ambiguous` in
+   `crates/core/tests/integration.rs`, which asserts the phrase appears
+   exactly once in a real end-to-end text report.
+
+None of the above were previously listed anywhere in this file or
+`CHANGELOG.md`.
+
 ---
 
 ## Bucket 1: Built and tested (verified working)
@@ -197,6 +270,33 @@ awareness):**
   (`lib/beam.rs`, `lib/flink.rs`, `lib/spark.rs`) for maintainability.
 
 **Flagged for a dedicated follow-up session:**
+- `crates/core/src/analyzers/deployment.rs` (`DeploymentAnalyzer`): 7 of its
+  8 findings (`DEPLOY_SMALL_MACHINE`, `DEPLOY_EXCESSIVE_MAX_WORKERS`,
+  `DEPLOY_HIGH_MIN_WORKERS`, `DEPLOY_NON_US_REGION`,
+  `DEPLOY_NO_AUTOSCALING_ALG`, `DEPLOY_NO_STREAMING_ENGINE`, and the
+  identically-gated `BESTPRAC_STREAMING_ENGINE` in `best_practices.rs`) all
+  read `ir.metadata.deployment_config: Option<DeploymentConfig>`
+  (`crates/core/src/ir.rs:35`), but **nothing in the shipped product ever
+  sets it to `Some`.** `BeamPipelineParser::parse` (and the Flink/Spark
+  parsers) never populate it, `PipelineIR::new` always sets it to `None`
+  (`crates/core/src/ir.rs:123`), and neither the CLI (`--data-profile`
+  loads a `DataProfile`, not a `DeploymentConfig`; there is no
+  `--deployment-config` flag) nor any of the ~30 `#[pyfunction]`s in
+  `bindings/python/src/lib.rs` accept one (confirmed by grep: the only
+  `deployment`-related string in that file is a help-text analyzer-name
+  listing, not a real parameter). The practical effect: through the CLI or
+  Python bindings — the only two ways a real user runs this tool — a
+  `deployment_config` for a would-be pipeline is *always* `None`, so
+  `DeploymentAnalyzer` can only ever emit `DEPLOY_NO_CONFIG` and the other
+  7 findings are dead code from a user's perspective, even though
+  `ROADMAP_HONEST.md`'s "Built and tested" bucket and the README's "10
+  analyzers" claim are both technically true (the Rust unit tests in
+  `deployment.rs` do exercise those 7 findings, by constructing a
+  `PipelineIR` with `deployment_config` set by hand — a path no shipped
+  entry point can reach). Not fixed here: closing this gap means adding
+  and documenting a real `--deployment-config <file.json>` CLI flag and a
+  matching Python API parameter, a scope/design decision, not a one-line
+  fix.
 - `bindings/python` (the PyO3 crate) has **zero** `#[test]`s of its own.
   The compiled extension is only exercised indirectly through
   `tests/test_python_bindings.py` (pytest, 23 tests). A regression in a

@@ -15,6 +15,31 @@ file was created is **1.2.0** (published on PyPI and tagged up to
 
 ## [Unreleased]
 
+### Fixed
+- `crates/core/src/parser.rs`: `beam.WindowInto(GlobalWindows())` was never
+  detected as a windowing operation (`windowing_re` matched
+  `Windowing`/`FixedWindows`/`SlidingWindows`/`SessionWindows` but not
+  `WindowInto`/`GlobalWindows`), which silently disabled
+  `WINDOWING_GLOBAL_NO_TRIGGER` — a High-severity finding whose entire
+  purpose is to catch a global window with no trigger — for every pipeline
+  that actually uses `GlobalWindows()`. Added `WindowInto` to the pattern.
+  See `ROADMAP_HONEST.md` for the reproduction and regression test.
+- `crates/core/src/analyzers/reliability.rs`: `RELIABILITY_NO_ERROR_HANDLING`
+  was gated on a pipeline-wide "does *any* ParDo have side outputs" flag
+  instead of the specific ParDo node's own `has_side_outputs`, so a
+  parsing/decoding ParDo with no error handling of its own was silently
+  never flagged as long as some unrelated ParDo elsewhere in the pipeline
+  had side outputs for its own purposes. Fixed to check the node's own
+  field.
+- `crates/core/src/analyzers/synthesis.rs`: `SynthesisEngine`'s summary
+  line and `TextReporter`'s top-of-report aggregate both used the literal
+  phrase "Overall Risk Score N/100" for two differently-scaled,
+  opposite-polarity metrics (higher = riskier vs. higher = healthier),
+  appearing together in the same text report. Renamed the
+  `SynthesisEngine` display string to "Pipeline Health Score" (the
+  underlying `overall_risk_score` field/metric name is unchanged to avoid
+  a breaking API change in the JSON output / Python bindings).
+
 ## [1.2.1] - 2026-09-22
 
 ### Added

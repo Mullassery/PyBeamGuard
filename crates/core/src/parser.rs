@@ -20,8 +20,21 @@ impl PatternCache {
             beam_import_re: Regex::new(r"import apache_beam|from apache_beam").unwrap(),
             pardo_re: Regex::new(r"ParDo|beam\.ParDo").unwrap(),
             groupby_re: Regex::new(r"GroupByKey|beam\.GroupByKey").unwrap(),
-            windowing_re: Regex::new(r"Windowing|FixedWindows|SlidingWindows|SessionWindows")
-                .unwrap(),
+            // `WindowInto` (the actual `beam.WindowInto(...)` call) is
+            // included alongside the specific window-class names: a bare
+            // `beam.WindowInto(GlobalWindows())` line contains none of
+            // "Windowing"/"FixedWindows"/"SlidingWindows"/"SessionWindows"
+            // (it's "WindowInto", not "Windowing"), so without it this regex
+            // never matched GlobalWindows usage at all -- no Windowing node
+            // was ever created for it, which meant WINDOWING_GLOBAL_NO_TRIGGER
+            // (a High-severity finding specifically about GlobalWindows
+            // without a trigger) could never fire for real GlobalWindows()
+            // code, only for lines that happened to also contain one of the
+            // other three literal class names.
+            windowing_re: Regex::new(
+                r"Windowing|WindowInto|FixedWindows|SlidingWindows|SessionWindows",
+            )
+            .unwrap(),
             // `beam\.io\.Write` (not bare `beam\.io`) — the latter also
             // matches `beam.io.ReadFromX(...)` source calls, misclassifying
             // every source line as a sink too.
@@ -544,6 +557,30 @@ x = beam.WindowInto(FixedWindows(seconds(60)), allowed_lateness(300))
         };
         assert_eq!(window_type(&sliding), "sliding");
         assert_eq!(window_type(&session), "session");
+    }
+
+    #[test]
+    fn test_parse_detects_global_windows() {
+        // Regression test: `beam.WindowInto(GlobalWindows())` contains none
+        // of "Windowing"/"FixedWindows"/"SlidingWindows"/"SessionWindows"
+        // (it's "WindowInto", not "Windowing"), so this used to produce no
+        // Windowing node at all -- silently disabling
+        // WINDOWING_GLOBAL_NO_TRIGGER (a High-severity finding) for the
+        // exact case it exists to catch.
+        let parser = BeamPipelineParser::new();
+        let ir = parser
+            .parse("import apache_beam as beam\nx = beam.WindowInto(GlobalWindows())")
+            .unwrap();
+
+        let window_type = ir
+            .nodes
+            .iter()
+            .find_map(|n| match &n.node_type {
+                TransformType::Windowing { window_type, .. } => Some(window_type.clone()),
+                _ => None,
+            })
+            .expect("GlobalWindows() usage should produce a Windowing node");
+        assert_eq!(window_type, "global");
     }
 
     #[test]

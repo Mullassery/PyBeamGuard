@@ -36,8 +36,11 @@ impl Analyzer for ReliabilityAnalyzer {
             if has_dlq { 1.0 } else { 0.0 },
         );
 
-        // Check for side outputs (alternate failure path)
-        let _has_side_outputs = ir.nodes.iter().any(|n| {
+        // Check for side outputs (alternate failure path). Kept as a
+        // pipeline-wide metric (below), but deliberately NOT used to gate
+        // the per-node RELIABILITY_NO_ERROR_HANDLING check in the loop
+        // below -- see that loop's comment for why.
+        let pipeline_has_side_outputs = ir.nodes.iter().any(|n| {
             matches!(
                 n.node_type,
                 TransformType::ParDo {
@@ -48,17 +51,30 @@ impl Analyzer for ReliabilityAnalyzer {
         });
         metrics.insert(
             "has_side_outputs".to_string(),
-            if _has_side_outputs { 1.0 } else { 0.0 },
+            if pipeline_has_side_outputs { 1.0 } else { 0.0 },
         );
 
-        // Check for transformations that might silently fail
+        // Check for transformations that might silently fail. This must
+        // check *this node's own* `has_side_outputs` field, not a
+        // pipeline-wide aggregate: `has_error_handling` above is computed by
+        // `check_error_handling`, which is the exact same "does *any* ParDo
+        // in the whole pipeline have side outputs" predicate as
+        // `pipeline_has_side_outputs`. Gating this per-node finding on
+        // either of those meant an unrelated ParDo elsewhere in the
+        // pipeline having side outputs for its own purposes would silently
+        // suppress this finding for a parsing/decoding ParDo that has no
+        // error handling of its own.
         for node in &ir.nodes {
-            if let TransformType::ParDo { dofn_name, .. } = &node.node_type {
+            if let TransformType::ParDo {
+                dofn_name,
+                has_side_outputs,
+                ..
+            } = &node.node_type
+            {
                 if (dofn_name.to_lowercase().contains("parse")
                     || dofn_name.to_lowercase().contains("decode")
                     || dofn_name.to_lowercase().contains("extract"))
-                    && !has_error_handling
-                    && !_has_side_outputs
+                    && !has_side_outputs
                 {
                     findings.push(Finding {
                         id: "RELIABILITY_NO_ERROR_HANDLING".to_string(),
@@ -209,5 +225,84 @@ mod tests {
             .findings
             .iter()
             .any(|f| f.id == "RELIABILITY_NO_SINK"));
+    }
+
+    fn pardo_node(id: &str, dofn_name: &str, has_side_outputs: bool) -> TransformNode {
+        TransformNode {
+            id: id.to_string(),
+            name: dofn_name.to_string(),
+            node_type: TransformType::ParDo {
+                dofn_name: dofn_name.to_string(),
+                is_stateful: false,
+                has_side_inputs: false,
+                has_side_outputs,
+            },
+            inputs: vec![],
+            outputs: vec![],
+            config: serde_json::json!({}),
+            annotations: vec![],
+            line_number: None,
+        }
+    }
+
+    #[test]
+    fn test_parse_pardo_without_error_handling_is_flagged() {
+        let mut ir = PipelineIR::new("test".to_string());
+        ir.nodes.push(pardo_node("node_parse", "ParseFn", false));
+
+        let ctx = AnalysisContext {
+            pipeline_ir: ir,
+            data_profile: None,
+        };
+        let result = ReliabilityAnalyzer.analyze(&ctx).unwrap();
+        assert!(result
+            .findings
+            .iter()
+            .any(|f| f.id == "RELIABILITY_NO_ERROR_HANDLING"));
+    }
+
+    #[test]
+    fn test_parse_pardo_with_its_own_side_output_is_not_flagged() {
+        let mut ir = PipelineIR::new("test".to_string());
+        ir.nodes.push(pardo_node("node_parse", "ParseFn", true));
+
+        let ctx = AnalysisContext {
+            pipeline_ir: ir,
+            data_profile: None,
+        };
+        let result = ReliabilityAnalyzer.analyze(&ctx).unwrap();
+        assert!(!result
+            .findings
+            .iter()
+            .any(|f| f.id == "RELIABILITY_NO_ERROR_HANDLING"));
+    }
+
+    #[test]
+    fn test_unrelated_pardo_side_output_does_not_mask_parse_finding() {
+        // Regression test: RELIABILITY_NO_ERROR_HANDLING used to be gated on
+        // a pipeline-wide "does *any* ParDo have side outputs" flag instead
+        // of the specific parsing node's own `has_side_outputs`. A ParseFn
+        // with no error handling of its own must still be flagged even when
+        // an unrelated ParDo elsewhere in the pipeline has side outputs for
+        // its own purposes.
+        let mut ir = PipelineIR::new("test".to_string());
+        ir.nodes.push(pardo_node("node_parse", "ParseFn", false));
+        ir.nodes.push(pardo_node("node_enrich", "EnrichFn", true));
+
+        let ctx = AnalysisContext {
+            pipeline_ir: ir,
+            data_profile: None,
+        };
+        let result = ReliabilityAnalyzer.analyze(&ctx).unwrap();
+        assert!(
+            result
+                .findings
+                .iter()
+                .any(|f| f.id == "RELIABILITY_NO_ERROR_HANDLING"
+                    && f.affected_nodes == vec!["node_parse".to_string()]),
+            "ParseFn has no error handling of its own; EnrichFn's unrelated side output \
+             must not suppress this finding; got: {:?}",
+            result.findings.iter().map(|f| &f.id).collect::<Vec<_>>()
+        );
     }
 }

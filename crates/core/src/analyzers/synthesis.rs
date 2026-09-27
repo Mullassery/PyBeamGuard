@@ -85,8 +85,19 @@ impl Analyzer for SynthesisEngine {
             "CRITICAL - Do Not Deploy"
         };
 
+        // Deliberately *not* called "Overall Risk Score" in this
+        // human-readable string: `TextReporter` separately prints a
+        // top-of-report "Overall Risk Score: N/100" line computed from
+        // summed finding severities, where higher = riskier. This
+        // `overall_risk_score` (the field/metric name, kept as-is for
+        // backward compatibility with the JSON output and Python bindings)
+        // is the opposite polarity -- higher = healthier/more
+        // production-ready, per `risk_level` above. Reusing the same
+        // display phrase for both in the same report previously produced
+        // two differently-scaled numbers both labeled "Overall Risk Score"
+        // in a single `pybeamguard analyze` run.
         let summary = format!(
-            "PyBeamGuard Executive Summary: Overall Risk Score {:.0}/100 ({}) | \
+            "PyBeamGuard Executive Summary: Pipeline Health Score {:.0}/100 ({}) | \
              Performance {:.0} | Reliability {:.0} | Cost Efficiency {:.0}",
             overall_risk_score,
             risk_level,
