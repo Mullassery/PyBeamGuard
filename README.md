@@ -1,5 +1,7 @@
 # PyBeamGuard
 
+[![Grapify](https://img.shields.io/badge/Grapify-Code%20Scan-purple)](https://grapify.ai)
+
 **Catch Apache Beam failures before deployment. Forecast costs. Fix hot keys.**
 
 Analyze Beam pipelines pre-deployment to identify bottlenecks, reliability risks, and cost drivers. FREE. No cloud account required. Works offline.
