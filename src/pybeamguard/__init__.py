@@ -1,6 +1,6 @@
 """PyBeamGuard: Apache Beam & Dataflow Pipeline Analysis Platform
 
-A free, proprietary software tool for analyzing Apache Beam pipelines and
+A free, open-source software tool for analyzing Apache Beam pipelines and
 Google Cloud Dataflow deployments to identify performance bottlenecks,
 reliability risks, and cost optimization opportunities.
 
@@ -52,7 +52,7 @@ except Exception:  # pragma: no cover - only hit on a broken/uninstalled package
     __version__ = "0.0.0+unknown"
 __author__ = "Georgi Mammen Mullassery"
 __email__ = "mullassery@gmail.com"
-__license__ = "Proprietary"
+__license__ = "Apache-2.0"
 
 try:
     # Import native PyO3 module
