@@ -40,6 +40,11 @@ file was created is **1.2.0** (published on PyPI and tagged up to
   underlying `overall_risk_score` field/metric name is unchanged to avoid
   a breaking API change in the JSON output / Python bindings).
 
+## [1.2.2] - 2026-10-17
+
+### Fixed
+- Audit remediation: security hardening, correctness fixes, and lint/CI gates.
+
 ## [1.2.1] - 2026-09-22
 
 ### Added
