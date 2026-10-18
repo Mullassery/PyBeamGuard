@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.4.0] - 2026-10-19
+
+### Added
+- `analyze --ast`: an optional Python AST inventory (transforms, sources,
+  sinks, windowing) plus an AST-only finding when an unbounded source
+  (`ReadFromPubSub`/`ReadFromKafka`) appears without a windowing transform.
+  JSON output nests `analyzers` + `ast_inventory`; text appends the inventory.
+  `--fail-on` also considers AST findings. Tests in `tests/test_ast_inventory.py`.
+
 ## [1.3.0] - 2026-10-19
 
 ### Added

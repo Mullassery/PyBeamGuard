@@ -86,6 +86,11 @@ def _build_parser() -> argparse.ArgumentParser:
         ),
     )
     analyze_parser.add_argument(
+        "--ast",
+        action="store_true",
+        help="Add a Python AST inventory (sources/sinks/windowing) and AST-only findings.",
+    )
+    analyze_parser.add_argument(
         "--fail-on",
         dest="fail_on",
         default=None,
@@ -194,6 +199,10 @@ def _cmd_analyze(args: argparse.Namespace) -> int:
     # parameter (no rule-driven analyzers), so it's only passed for beam/spark.
     extra_args = () if args.framework == "flink" else (rules_yaml,)
 
+    from .ast_inventory import inventory_source, render_text as render_ast
+
+    ast_inventories = [inventory_source(code) for _path, code in sources] if args.ast else []
+
     outputs: List[str] = []
     try:
         for path, code in sources:
@@ -207,10 +216,22 @@ def _cmd_analyze(args: argparse.Namespace) -> int:
         print(f"Analysis failed: {e}", file=sys.stderr)
         return 1
 
-    if args.format == "json" and len(sources) > 1:
-        print(json.dumps([json.loads(item) for item in outputs], indent=2))
+    if args.format == "json":
+        parsed = [json.loads(item) for item in outputs]
+        if args.ast:
+            if len(sources) == 1:
+                parsed = {"analyzers": parsed[0], "ast_inventory": ast_inventories[0]}
+            else:
+                parsed = [
+                    {"file": path, "analyzers": item, "ast_inventory": inventory}
+                    for (path, _code), item, inventory in zip(sources, parsed, ast_inventories)
+                ]
+        print(json.dumps(parsed, indent=2))
     else:
-        print("\n".join(outputs))
+        text = "\n".join(outputs)
+        if args.ast:
+            text += "\n\n" + "\n\n".join(render_ast(item) for item in ast_inventories)
+        print(text)
 
     if args.fail_on:
         threshold = _severity_rank(args.fail_on)
@@ -228,6 +249,13 @@ def _cmd_analyze(args: argparse.Namespace) -> int:
         except Exception as e:
             print(f"Analysis failed: {e}", file=sys.stderr)
             return 1
+        if args.ast:
+            for inventory in ast_inventories:
+                if any(
+                    _severity_rank(finding["severity"]) >= threshold
+                    for finding in inventory.get("findings", [])
+                ):
+                    breached = True
         if breached:
             print(
                 f"\n--fail-on {args.fail_on}: at least one finding meets or exceeds this severity.",

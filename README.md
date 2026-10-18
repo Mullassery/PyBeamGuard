@@ -89,6 +89,8 @@ check, not a full AST/type-level compiler front end.
   order-of-magnitude planning signal, not a quote.
 - **Directory scanning** — `analyze <dir>` recursively analyzes every `.py`
   file (skipping caches/virtualenvs); JSON output is a list of per-file reports.
+- **Optional AST inventory** — `analyze --ast` reports actual transforms,
+  sources/sinks, and windowing, and flags unbounded sources with no window.
 - **No Kafka Streams or Ray Data support** — neither has been started.
 - **No LLM features.** All analysis and recommendations are deterministic rules.
 - **Not organization governance tooling.** Budgets/SLOs/policy enforcement and
