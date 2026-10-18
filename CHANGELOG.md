@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.3.0] - 2026-10-19
+
+### Added
+- `pybeamguard analyze <directory>` recursively analyzes every `.py` file
+  (skipping `__pycache__`, `.git`, `node_modules`, and virtualenvs). JSON output
+  becomes a list of per-file reports; text output prefixes each file. `--fail-on`
+  evaluates all files. `tests/test_directory_scan.py` covers discovery.
+
 All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).

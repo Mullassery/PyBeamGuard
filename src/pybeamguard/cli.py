@@ -19,8 +19,10 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
-from typing import Optional, Sequence
+from pathlib import Path
+from typing import List, Optional, Sequence, Tuple
 
 from . import __version__
 
@@ -99,6 +101,24 @@ def _build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _pipeline_files(path: str) -> List[str]:
+    """A single `.py` file, or every `.py` under a directory (sorted)."""
+    target = Path(path)
+    if target.is_file():
+        return [str(target)]
+    if not target.is_dir():
+        return []
+    files: List[str] = []
+    for root, dirs, names in os.walk(target):
+        dirs[:] = sorted(
+            d for d in dirs if d not in {"__pycache__", ".git", "node_modules", ".venv", "venv"}
+        )
+        for name in sorted(names):
+            if name.endswith(".py"):
+                files.append(str(Path(root) / name))
+    return files
+
+
 def _cmd_analyze(args: argparse.Namespace) -> int:
     from . import core as native  # local import: keeps --help usable even if the native module failed to load
 
@@ -109,12 +129,19 @@ def _cmd_analyze(args: argparse.Namespace) -> int:
         )
         return 1
 
-    try:
-        with open(args.pipeline, "r", encoding="utf-8") as f:
-            code = f.read()
-    except OSError as e:
-        print(f"Error reading pipeline file '{args.pipeline}': {e}", file=sys.stderr)
+    files = _pipeline_files(args.pipeline)
+    if not files:
+        print(f"Error: no Python pipeline files found at '{args.pipeline}'", file=sys.stderr)
         return 1
+
+    sources: List[Tuple[str, str]] = []
+    for path in files:
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                sources.append((path, f.read()))
+        except OSError as e:
+            print(f"Error reading pipeline file '{path}': {e}", file=sys.stderr)
+            return 1
 
     data_profile_json: Optional[str] = None
     if args.data_profile:
@@ -167,30 +194,40 @@ def _cmd_analyze(args: argparse.Namespace) -> int:
     # parameter (no rule-driven analyzers), so it's only passed for beam/spark.
     extra_args = () if args.framework == "flink" else (rules_yaml,)
 
+    outputs: List[str] = []
     try:
-        if args.format == "json":
-            output = json_report(code, data_profile_json, *extra_args)
-        else:
-            output = text_report(code, data_profile_json, *extra_args)
+        for path, code in sources:
+            if args.format == "json":
+                outputs.append(json_report(code, data_profile_json, *extra_args))
+            else:
+                if len(sources) > 1:
+                    outputs.append(f"== {path} ==")
+                outputs.append(text_report(code, data_profile_json, *extra_args))
     except Exception as e:  # native bindings raise plain Python exceptions
         print(f"Analysis failed: {e}", file=sys.stderr)
         return 1
 
-    print(output)
+    if args.format == "json" and len(sources) > 1:
+        print(json.dumps([json.loads(item) for item in outputs], indent=2))
+    else:
+        print("\n".join(outputs))
 
     if args.fail_on:
+        threshold = _severity_rank(args.fail_on)
+        breached = False
         try:
-            results = structured(code, data_profile_json, *extra_args)
+            for _path, code in sources:
+                results = structured(code, data_profile_json, *extra_args)
+                if any(
+                    _severity_rank(str(finding.severity)) >= threshold
+                    for result in results
+                    for finding in result.findings
+                ):
+                    breached = True
+                    break
         except Exception as e:
             print(f"Analysis failed: {e}", file=sys.stderr)
             return 1
-
-        threshold = _severity_rank(args.fail_on)
-        breached = any(
-            _severity_rank(str(finding.severity)) >= threshold
-            for result in results
-            for finding in result.findings
-        )
         if breached:
             print(
                 f"\n--fail-on {args.fail_on}: at least one finding meets or exceeds this severity.",

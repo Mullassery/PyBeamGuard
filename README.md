@@ -87,8 +87,8 @@ check, not a full AST/type-level compiler front end.
 - **Not a validated billing forecast.** Cost figures are rough, pre-deployment
   heuristics from simplified pricing assumptions — treat them as an
   order-of-magnitude planning signal, not a quote.
-- **Not a directory scanner (yet).** `analyze` takes a single pipeline file;
-  scanning a directory means looping over files in your shell/CI.
+- **Directory scanning** — `analyze <dir>` recursively analyzes every `.py`
+  file (skipping caches/virtualenvs); JSON output is a list of per-file reports.
 - **No Kafka Streams or Ray Data support** — neither has been started.
 - **No LLM features.** All analysis and recommendations are deterministic rules.
 - **Not organization governance tooling.** Budgets/SLOs/policy enforcement and

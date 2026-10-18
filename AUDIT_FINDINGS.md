@@ -20,7 +20,7 @@ Static pre-deployment analysis for Apache Beam, Flink, and Spark pipelines: hot 
 
 ## Verified gaps and user-facing risks
 
-- Regex/line-based analysis, not a real AST/compiler; single-file `analyze` (no directory scan).
+- Regex/line-based analysis, not a real AST/compiler; directory scan added, but parsing is still regex/line-based.
 - Cost figures are unvalidated heuristics; no Kafka/Ray support; macOS arm64 wheel only; no real pipeline corpus.
 - No committed accuracy/cost validation.
 
