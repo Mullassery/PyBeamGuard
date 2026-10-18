@@ -1,5 +1,19 @@
 # Changelog
 
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
+
+This file was introduced during a documentation/maturity pass on
+2026-09-19. Versions and changes prior to that date are **not**
+retroactively reconstructed here to avoid fabricating history — see
+`git log` for the real commit history, and `docs/archive/` for retired
+phase/completion reports. The current released version at the time this
+file was created is **1.2.0** (published on PyPI and tagged up to
+`v1.0.0` in git; `v1.1.x`/`v1.2.0` were version-bumped but not git-tagged
+— see `ROADMAP_HONEST.md`).
+
+
 
 
 ## [1.4.0] - 2026-10-19
@@ -18,19 +32,6 @@
   (skipping `__pycache__`, `.git`, `node_modules`, and virtualenvs). JSON output
   becomes a list of per-file reports; text output prefixes each file. `--fail-on`
   evaluates all files. `tests/test_directory_scan.py` covers discovery.
-
-All notable changes to this project will be documented in this file.
-
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
-
-This file was introduced during a documentation/maturity pass on
-2026-09-19. Versions and changes prior to that date are **not**
-retroactively reconstructed here to avoid fabricating history — see
-`git log` for the real commit history, and `docs/archive/` for retired
-phase/completion reports. The current released version at the time this
-file was created is **1.2.0** (published on PyPI and tagged up to
-`v1.0.0` in git; `v1.1.x`/`v1.2.0` were version-bumped but not git-tagged
-— see `ROADMAP_HONEST.md`).
 
 ## [Unreleased]
 
