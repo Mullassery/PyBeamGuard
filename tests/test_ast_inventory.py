@@ -37,3 +37,23 @@ def test_syntax_error_is_reported_not_raised():
     assert inventory["parsed"] is False
     assert inventory["syntax_error"]
     assert "parse failed" in render_text(inventory)
+
+
+def test_flags_group_by_key_without_combiner():
+    source = """
+import apache_beam as beam
+with beam.Pipeline() as p:
+    (p | beam.Create([1, 2]) | beam.GroupByKey() | beam.io.WriteToText("out"))
+"""
+    inventory = inventory_source(source)
+    assert any(f["id"] == "group_by_key_without_combine" for f in inventory["findings"])
+
+
+def test_combine_per_key_suppresses_the_group_finding():
+    source = """
+import apache_beam as beam
+with beam.Pipeline() as p:
+    (p | beam.Create([(1, 2)]) | beam.CombinePerKey(sum) | beam.io.WriteToText("out"))
+"""
+    inventory = inventory_source(source)
+    assert not any(f["id"] == "group_by_key_without_combine" for f in inventory["findings"])

@@ -60,6 +60,8 @@ def inventory_source(source: str) -> Dict[str, Any]:
     sources: List[str] = []
     sinks: List[str] = []
     has_windowing = False
+    has_group_by_key = False
+    has_combine = False
     findings: List[Dict[str, str]] = []
 
     for node in ast.walk(tree):
@@ -75,6 +77,19 @@ def inventory_source(source: str) -> Dict[str, Any]:
             sinks.append(name)
         if name in _WINDOWING:
             has_windowing = True
+        if name == "GroupByKey":
+            has_group_by_key = True
+        if name in {"CombinePerKey", "CombineGlobally", "CombineValues"}:
+            has_combine = True
+
+    if has_group_by_key and not has_combine:
+        findings.append(
+            {
+                "id": "group_by_key_without_combine",
+                "severity": "medium",
+                "message": "GroupByKey without a CombinePerKey/CombineValues can create a hot-key bottleneck; prefer a combiner when the aggregation is associative.",
+            }
+        )
 
     if sources and not has_windowing:
         findings.append(

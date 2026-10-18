@@ -16,6 +16,13 @@ file was created is **1.2.0** (published on PyPI and tagged up to
 
 
 
+## [1.5.0] - 2026-10-19
+
+### Added
+- AST check for `GroupByKey` without a `CombinePerKey`/`CombineValues`/`CombineGlobally`,
+  reported as a medium-severity hot-key risk. Tests cover both the finding and
+  the combiner-suppressed case.
+
 ## [1.4.0] - 2026-10-19
 
 ### Added

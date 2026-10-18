@@ -90,7 +90,8 @@ check, not a full AST/type-level compiler front end.
 - **Directory scanning** — `analyze <dir>` recursively analyzes every `.py`
   file (skipping caches/virtualenvs); JSON output is a list of per-file reports.
 - **Optional AST inventory** — `analyze --ast` reports actual transforms,
-  sources/sinks, and windowing, and flags unbounded sources with no window.
+  sources/sinks, and windowing, flags unbounded sources with no window, and
+  flags `GroupByKey` without a combiner.
 - **No Kafka Streams or Ray Data support** — neither has been started.
 - **No LLM features.** All analysis and recommendations are deterministic rules.
 - **Not organization governance tooling.** Budgets/SLOs/policy enforcement and

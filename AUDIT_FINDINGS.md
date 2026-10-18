@@ -20,7 +20,7 @@ Static pre-deployment analysis for Apache Beam, Flink, and Spark pipelines: hot 
 
 ## Verified gaps and user-facing risks
 
-- Native analyzers are regex/line-based; `--ast` adds a real Python AST inventory and unbounded-source check, but the native analyzers are still regex-based.
+- Native analyzers are regex/line-based; `--ast` adds a real Python AST inventory, unbounded-source check, and GroupByKey-without-combiner check, but the native analyzers are still regex-based.
 - Cost figures are unvalidated heuristics; no Kafka/Ray support; macOS arm64 wheel only; no real pipeline corpus.
 - No committed accuracy/cost validation.
 
