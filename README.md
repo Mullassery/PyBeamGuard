@@ -225,6 +225,16 @@ optional `rules_yaml` string.
 - [docs/archive/BUILD_SUMMARY.md](docs/archive/BUILD_SUMMARY.md) — historical
   phase implementation notes.
 
+## Known issues and deferred work
+
+**Blocked / failed:**
+- Native Rust AST rewrite; non-mac wheels.
+
+**Rejected / deferred:**
+- Kafka Streams/Ray support.
+
+Full shipped/blocked/rejected detail: [`QUEUE_STATUS.md`](QUEUE_STATUS.md).
+
 ## Queue status
 
 Shipped, blocked/failed, and rejected work for this repository is documented in
