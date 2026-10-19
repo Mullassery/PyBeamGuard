@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "outputs": {
+    "md": [
+      "bindings.1.md",
+      "core.2.1.md",
+      "crates.2.md",
+      "docs.3.md",
+      "overview.md",
+      "python.1.1.md",
+      "src.5.md",
+      "tools.7.md"
+    ],
+    "html": [
+      "bindings.1.html",
+      "core.2.1.html",
+      "crates.2.html",
+      "docs.3.html",
+      "overview.html",
+      "python.1.1.html",
+      "src.5.html",
+      "tools.7.html"
+    ]
+  }
+}

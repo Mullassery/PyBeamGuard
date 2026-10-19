@@ -34,4 +34,4 @@ build/
 .env.local
 *.log
 
-graphify-out/
+codeatlas-out/
