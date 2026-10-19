@@ -225,6 +225,11 @@ optional `rules_yaml` string.
 - [docs/archive/BUILD_SUMMARY.md](docs/archive/BUILD_SUMMARY.md) — historical
   phase implementation notes.
 
+## Queue status
+
+Shipped, blocked/failed, and rejected work for this repository is documented in
+[`QUEUE_STATUS.md`](QUEUE_STATUS.md).
+
 ## Contributing
 
 Contributions are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md) for layout,
