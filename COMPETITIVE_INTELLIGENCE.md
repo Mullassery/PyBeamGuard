@@ -56,6 +56,8 @@ starts, and record the decision in the PR or changelog.
 
 ## OSS gap analysis — 2026-10-24
 
+**What matters most here:** AST-grade analysis and validated cost. Regex/line matching and unvalidated rates limit it to linting; deepen the analyzers and back cost forecasts with real pipeline bills before selling pre-deployment assurance.
+
 Scope: open-source pipeline runtimes and data validators that overlap
 PyBeamGuard's reliability, shuffle, hot-key, and cost checks. No active OSS
 project found with the same static, multi-engine scope. Dates/licenses verified 2026-10-24.
