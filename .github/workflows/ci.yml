@@ -125,7 +125,7 @@ jobs:
     # against the live RustSec advisory database (77 crates scanned, 0
     # vulnerabilities). Promoted from continue-on-error to a hard gate now
     # that it's confirmed to actually pass rather than being unverified.
-    # See ROADMAP_HONEST.md for the tracked gap this closes (no automated
+    # See docs/internal/ROADMAP_HONEST.md for the tracked gap this closes (no automated
     # dependency vulnerability scanning existed before).
     steps:
       - uses: actions/checkout@v4
