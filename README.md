@@ -102,7 +102,7 @@ check, not a full AST/type-level compiler front end.
 **Beta / working proof-of-concept.** The Beam, Flink, and Spark analysis paths,
 the CLI, the Python bindings, and the YAML rule engine are implemented and
 covered by tests, and CI builds and tests the core crate. See
-[ROADMAP_HONEST.md](ROADMAP_HONEST.md) for a blunt, file:line-level accounting of
+[docs/internal/ROADMAP_HONEST.md](docs/internal/ROADMAP_HONEST.md) for a blunt, file:line-level accounting of
 what is tested, what is not built, and known technical debt.
 
 ## Installation
@@ -216,7 +216,7 @@ optional `rules_yaml` string.
 
 ## Documentation
 
-- [ROADMAP_HONEST.md](ROADMAP_HONEST.md) — verified status: what's tested, what
+- [docs/internal/ROADMAP_HONEST.md](docs/internal/ROADMAP_HONEST.md) — verified status: what's tested, what
   isn't built, known CI gaps, and technical debt with file:line specifics.
 - [CONTRIBUTING.md](CONTRIBUTING.md) — project layout, local setup, and the exact
   commands CI runs.
@@ -233,7 +233,7 @@ optional `rules_yaml` string.
 **Rejected / deferred:**
 - Kafka Streams/Ray support.
 
-Full shipped/blocked/rejected detail: [`QUEUE_STATUS.md`](QUEUE_STATUS.md).
+Full shipped/blocked/rejected detail: [`docs/internal/QUEUE_STATUS.md`](docs/internal/QUEUE_STATUS.md).
 
 ## Contributing
 

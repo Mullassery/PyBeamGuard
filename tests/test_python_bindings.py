@@ -214,7 +214,7 @@ class TestCliMain:
         exit_code = main(["analyze", "/nonexistent/path/to/pipeline.py"])
         captured = capsys.readouterr()
         assert exit_code == 1
-        assert "Error reading pipeline file" in captured.err
+        assert "no Python pipeline files found" in captured.err
 
     def test_analyze_malformed_data_profile_is_clean_error(self, capsys, tmp_path):
         from pybeamguard.cli import main
@@ -239,7 +239,10 @@ class TestCliMain:
         captured = capsys.readouterr()
         assert exit_code == 0
         default_findings = {
-            f["id"] for r in json.loads(captured.out) for f in r["findings"]
+            f["id"]
+            for file_results in json.loads(captured.out)
+            for r in file_results
+            for f in r["findings"]
         }
         assert "HOTKEY_HIGH_RISK" not in default_findings
 
@@ -259,7 +262,10 @@ class TestCliMain:
         captured = capsys.readouterr()
         assert exit_code == 0
         custom_findings = {
-            f["id"] for r in json.loads(captured.out) for f in r["findings"]
+            f["id"]
+            for file_results in json.loads(captured.out)
+            for r in file_results
+            for f in r["findings"]
         }
         assert "HOTKEY_HIGH_RISK" in custom_findings
 

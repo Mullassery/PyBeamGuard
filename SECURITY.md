@@ -41,7 +41,7 @@ project are:
 - A crafted pipeline source file, `--data-profile` JSON file, or `--rules`
   YAML file that causes a crash, panic, hang, or resource exhaustion
   (denial of service) rather than a clean error. The Rust core has 114+
-  `.unwrap()`/`.expect()` call sites (see `ROADMAP_HONEST.md`) that have
+  `.unwrap()`/`.expect()` call sites (see `docs/internal/ROADMAP_HONEST.md`) that have
   not been systematically audited for panic-on-malformed-input; the
   integration test suite covers some malformed-input cases
   (`crates/core/tests/integration.rs`: empty source, non-Beam source,
@@ -51,13 +51,13 @@ project are:
   (`bindings/python/src/lib.rs`) reachable from untrusted input.
 - Supply-chain issues in dependencies — see `cargo audit` results in CI
   (`.github/workflows/ci.yml`, `security-audit` job, informational/
-  non-blocking as of this writing — see `ROADMAP_HONEST.md`).
+  non-blocking as of this writing — see `docs/internal/ROADMAP_HONEST.md`).
 
 This tool does not process secrets, credentials, or PII by design, and has
 no telemetry or network calls of its own.
 
 ## Known gaps
 
-See the "Technical Debt" section of `ROADMAP_HONEST.md` for the current,
+See the "Technical Debt" section of `docs/internal/ROADMAP_HONEST.md` for the current,
 honest list of unaudited panic surface and dependency-scanning gaps —
 these are documented there rather than silently left undocumented.

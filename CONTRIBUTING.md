@@ -101,7 +101,7 @@ matters.
 
 ## Honesty in docs and PRs
 
-This project's README and `ROADMAP_HONEST.md` are deliberately blunt about
+This project's README and `docs/internal/ROADMAP_HONEST.md` are deliberately blunt about
 what is and isn't built/tested. When contributing:
 - Don't describe untested code as working.
 - Don't add "planned"/marketing language for things that don't exist yet —

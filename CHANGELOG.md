@@ -11,7 +11,7 @@ retroactively reconstructed here to avoid fabricating history — see
 phase/completion reports. The current released version at the time this
 file was created is **1.2.0** (published on PyPI and tagged up to
 `v1.0.0` in git; `v1.1.x`/`v1.2.0` were version-bumped but not git-tagged
-— see `ROADMAP_HONEST.md`).
+— see `docs/internal/ROADMAP_HONEST.md`).
 
 
 
@@ -50,7 +50,7 @@ file was created is **1.2.0** (published on PyPI and tagged up to
   `WINDOWING_GLOBAL_NO_TRIGGER` — a High-severity finding whose entire
   purpose is to catch a global window with no trigger — for every pipeline
   that actually uses `GlobalWindows()`. Added `WindowInto` to the pattern.
-  See `ROADMAP_HONEST.md` for the reproduction and regression test.
+  See `docs/internal/ROADMAP_HONEST.md` for the reproduction and regression test.
 - `crates/core/src/analyzers/reliability.rs`: `RELIABILITY_NO_ERROR_HANDLING`
   was gated on a pipeline-wide "does *any* ParDo have side outputs" flag
   instead of the specific ParDo node's own `has_side_outputs`, so a
@@ -76,12 +76,12 @@ file was created is **1.2.0** (published on PyPI and tagged up to
 
 ### Added
 - `SECURITY.md`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, this
-  `CHANGELOG.md`, and `ROADMAP_HONEST.md`.
+  `CHANGELOG.md`, and `docs/internal/ROADMAP_HONEST.md`.
 - `.github/dependabot.yml` (cargo, pip, and github-actions ecosystems).
 - `.github/ISSUE_TEMPLATE/bug_report.yml` and `feature_request.yml`,
   `.github/pull_request_template.md`.
 - A `security-audit` job in CI running `cargo audit` (informational,
-  non-blocking — see `ROADMAP_HONEST.md`).
+  non-blocking — see `docs/internal/ROADMAP_HONEST.md`).
 
 ### Fixed
 - `.github/workflows/release.yml`: referenced `BUILD_SUMMARY.md` at the
@@ -130,4 +130,4 @@ file was created is **1.2.0** (published on PyPI and tagged up to
   this pass (network access available this time) — 77 crate
   dependencies scanned, 0 vulnerabilities found. Promoted the job from
   `continue-on-error: true` to a hard gate now that it's confirmed to
-  pass rather than being unverified (see `ROADMAP_HONEST.md`).
+  pass rather than being unverified (see `docs/internal/ROADMAP_HONEST.md`).
