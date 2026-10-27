@@ -617,7 +617,7 @@ test result: ok. 19 passed
 
 ### Local Development
 ```bash
-git clone https://github.com/Mullassery/pybeamguard.git
+git clone ../pybeamguard
 cd pybeamguard
 cargo build --release
 ./target/release/pybeamguard analyze examples/pipeline_simple.py
@@ -626,7 +626,7 @@ cargo build --release
 ### Binary Installation
 ```bash
 # Download from GitHub Releases
-curl -fsSL https://github.com/Mullassery/pybeamguard/releases/download/v0.4.0/pybeamguard-macos-universal \
+curl -fsSL ../pybeamguard/releases/download/v0.4.0/pybeamguard-macos-universal \
   -o /usr/local/bin/pybeamguard
 chmod +x /usr/local/bin/pybeamguard
 pybeamguard help

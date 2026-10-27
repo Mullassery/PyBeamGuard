@@ -363,7 +363,7 @@ MIT License - See LICENSE file
 ## Contact
 
 For questions, issues, or contributions:
-- GitHub: https://github.com/Mullassery/pybeamguard
+- GitHub: ../pybeamguard
 - Email: mullassery@gmail.com
 
 ---

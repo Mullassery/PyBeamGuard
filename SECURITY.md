@@ -17,7 +17,7 @@ Please report security issues privately rather than opening a public
 GitHub issue:
 
 - Email: mullassery@gmail.com
-- Or use [GitHub's private vulnerability reporting](https://github.com/Mullassery/PyBeamGuard/security/advisories/new)
+- Or use [GitHub's private vulnerability reporting](../PyBeamGuard/security/advisories/new)
   if enabled for this repository.
 
 Include:

@@ -30,7 +30,7 @@ include real test evidence — see below.
 Requires Rust 1.70+ and Python 3.10+.
 
 ```bash
-git clone https://github.com/Mullassery/PyBeamGuard.git
+git clone ../PyBeamGuard
 cd PyBeamGuard
 
 # Rust core + CLI binary
